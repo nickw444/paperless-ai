@@ -60,7 +60,7 @@ class Document(BaseModel):
     archive_serial_number: int | None = None
     original_file_name: str
     archived_file_name: str | None = None
-    owner: int
+    owner: int | None = None
     user_can_change: bool = True
 
 
