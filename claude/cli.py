@@ -123,19 +123,29 @@ IMPORTANT:
 - Only suggest NEW correspondents when confident they should exist but aren't in the list
 - Do NOT suggest NEW tags, document types, or storage paths - only use existing options
 
-MATCHING GUIDELINES FOR CORRESPONDENTS:
-- Try to match existing correspondents even if the name isn't exact. For example:
-  - If the document says "Amazon.com" and "Amazon" exists, use "Amazon"
-  - If the document says "Dr. Smith's Office" and "Dr. Smith" exists, use "Dr. Smith"
-- Only suggest NEW correspondents when there's clearly no reasonable match in the existing list
-- Examples:
-  - Document from "Amazon", no "Amazon" in list → suggest "NEW: Amazon"
-  - Document from "Amazon.com", "Amazon Inc." exists → use "Amazon Inc."
+MATCHING GUIDELINES FOR CORRESPONDENTS - FOLLOW THIS PROCESS:
+
+Step 1: CHECK FOR EXACT MATCHES FIRST (case-insensitive)
+- Before suggesting a NEW correspondent, carefully scan the ENTIRE available list
+- Look for exact matches ignoring case (e.g., "Amber Electric" matches "AMBER ELECTRIC")
+- If you find an exact match, USE IT - never suggest NEW for exact matches
+
+Step 2: CHECK FOR CLOSE MATCHES
+- If no exact match, look for very similar names:
+  - "Amazon.com" should match "Amazon"
+  - "Dr. Smith's Office" should match "Dr. Smith"
+  - "City Bank" should match "City Bank Australia"
+- When in doubt, prefer matching an existing correspondent over creating new
+
+Step 3: ONLY THEN suggest NEW
+- Only suggest NEW correspondents when you've carefully checked and found no reasonable match
+- Examples when NEW is appropriate:
   - Document from "Netflix", only "Amazon" and "Utilities" exist → suggest "NEW: Netflix"
+  - Document from "Target", list has "Walmart, Costco, IKEA" → suggest "NEW: Target"
 
 NORMALIZATION FOR NEW CORRESPONDENTS:
 - When suggesting NEW correspondents, use clean, canonical names:
-  - "Amazon.com" → "NEW: Amazon"
+  - "Amazon.com, Inc." → "NEW: Amazon"
   - "Dr. John Smith, MD" → "NEW: Dr. John Smith"
   - "PG&E - Pacific Gas & Electric" → "NEW: Pacific Gas & Electric"
 - Avoid URLs, legal suffixes (Inc., LLC), or extra punctuation unless essential
