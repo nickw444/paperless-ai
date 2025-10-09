@@ -168,8 +168,11 @@ class PaperlessClient:
         return [StoragePath(**spath) for spath in results]
 
     def create_correspondent(self, name: str) -> Correspondent:
-        """Create a new correspondent."""
-        data = {"name": name}
+        """Create a new correspondent with ML matching enabled."""
+        data = {
+            "name": name,
+            "matching_algorithm": 6,  # 6 = Auto (ML matching)
+        }
         result = self._post("/api/correspondents/", data)
         return Correspondent(**result)
 
