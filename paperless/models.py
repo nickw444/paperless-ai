@@ -43,6 +43,19 @@ class DocumentType(BaseModel):
     document_count: int = 0
 
 
+class StoragePath(BaseModel):
+    """Paperless storage path model."""
+
+    id: int
+    name: str
+    slug: str
+    path: str
+    match: str = ""
+    matching_algorithm: int = 0
+    is_insensitive: bool = True
+    document_count: int = 0
+
+
 class Document(BaseModel):
     """Paperless document model."""
 
@@ -74,14 +87,23 @@ class CategorizationSuggestion(BaseModel):
     current_type_name: str | None = None
     suggested_type: str | None = None
     suggested_type_id: int | None = None
+    suggested_type_is_new: bool = False
     current_tags: list[int] = Field(default_factory=list)
     current_tag_names: list[str] = Field(default_factory=list)
     suggested_tags: list[str] = Field(default_factory=list)
+    suggested_tags_existing: list[str] = Field(default_factory=list)
+    suggested_tags_new: list[str] = Field(default_factory=list)
     suggested_tag_ids: list[int] = Field(default_factory=list)
     current_correspondent: int | None = None
     current_correspondent_name: str | None = None
     suggested_correspondent: str | None = None
     suggested_correspondent_id: int | None = None
+    suggested_correspondent_is_new: bool = False
+    current_storage_path: int | None = None
+    current_storage_path_name: str | None = None
+    suggested_storage_path: str | None = None
+    suggested_storage_path_id: int | None = None
+    suggested_storage_path_is_new: bool = False
     status: str = "success"
     error_message: str | None = None
 

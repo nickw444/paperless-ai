@@ -85,8 +85,9 @@ def list_inbox(output):
 )
 @click.option("--limit", type=int, help="Process only first N documents")
 @click.option("--export", type=click.Path(), help="Export suggestions to file (JSON)")
-def analyze(doc_id, output, limit, export):
-    """Analyze inbox documents and suggest categorizations (READ-ONLY)."""
+@click.option("--apply", is_flag=True, help="Apply changes after review")
+def analyze(doc_id, output, limit, export, apply):
+    """Analyze inbox documents and suggest categorizations."""
     try:
         engine = CategorizationEngine()
         client = engine.paperless
@@ -95,7 +96,19 @@ def analyze(doc_id, output, limit, export):
         if doc_id:
             documents = [client.get_document(doc_id)]
         else:
-            documents = client.list_inbox_documents()
+            # Exclude already-parsed documents (only when not analyzing a specific doc)
+            parsed_tag_id = None
+            try:
+                # Check if parsed tag exists, but don't create it yet
+                engine._load_metadata()
+                for tag in engine._tags:
+                    if tag.name.lower() == "paperless-ai-parsed":
+                        parsed_tag_id = tag.id
+                        break
+            except Exception:
+                pass  # If we can't check, continue without filtering
+
+            documents = client.list_inbox_documents(exclude_tag_id=parsed_tag_id)
             if limit:
                 documents = documents[:limit]
 
@@ -125,12 +138,131 @@ def analyze(doc_id, output, limit, export):
             for suggestion in suggestions:
                 _display_suggestion(suggestion)
 
+        # Show new entities review if any were found (only correspondents now)
+        if engine.new_entities_found and any(engine.new_entities_found.values()):
+            _show_new_entities_review(engine.new_entities_found)
+
+            if apply:
+                if click.confirm("\nCreate these new correspondents in Paperless?"):
+                    created = _create_new_entities(engine, engine.new_entities_found)
+                    console.print(
+                        f"[green]✓[/green] Created {created['correspondents']} new correspondent(s)"
+                    )
+
+                    # Re-run categorization ONLY for documents with NEW correspondents
+                    if engine.documents_with_new_entities:
+                        count = len(engine.documents_with_new_entities)
+                        if click.confirm(
+                            f"\nRe-categorize {count} documents that had new correspondents?"
+                        ):
+                            docs_to_reprocess = [
+                                doc
+                                for doc in documents
+                                if doc.id in engine.documents_with_new_entities
+                            ]
+                            new_suggestions = []
+                            with console.status(
+                                "[bold green]Re-categorizing documents..."
+                            ) as status:
+                                for i, doc in enumerate(docs_to_reprocess, 1):
+                                    count_text = f"{i}/{len(docs_to_reprocess)}"
+                                    status.update(
+                                        f"[bold green]Re-categorizing document {count_text}..."
+                                    )
+                                    new_suggestion = engine.categorize_document(doc)
+                                    new_suggestions.append(new_suggestion)
+                            # Replace old suggestions with new ones
+                            for new_sugg in new_suggestions:
+                                for i, old_sugg in enumerate(suggestions):
+                                    if old_sugg.document_id == new_sugg.document_id:
+                                        suggestions[i] = new_sugg
+                                        break
+
+        # Apply changes if requested
+        if apply and suggestions:
+            if click.confirm("\nApply categorization suggestions to documents?"):
+                _apply_suggestions(engine, suggestions)
+
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
         import traceback
 
         traceback.print_exc()
         sys.exit(1)
+
+
+def _apply_suggestions(engine, suggestions):
+    """Apply categorization suggestions to documents."""
+    # Get or create the paperless-ai-parsed tag
+    parsed_tag_id = engine.get_or_create_parsed_tag()
+
+    applied_count = 0
+    skipped_count = 0
+
+    with console.status("[bold green]Applying suggestions...") as status:
+        for i, suggestion in enumerate(suggestions, 1):
+            status.update(f"[bold green]Updating document {i}/{len(suggestions)}...")
+
+            # Skip if there was an error
+            if suggestion.status != "success":
+                skipped_count += 1
+                continue
+
+            # Build tags list: include parsed tag + suggested tags
+            tags = list(suggestion.suggested_tag_ids) if suggestion.suggested_tag_ids else []
+            if parsed_tag_id not in tags:
+                tags.append(parsed_tag_id)
+
+            try:
+                engine.paperless.update_document(
+                    document_id=suggestion.document_id,
+                    title=suggestion.suggested_title,
+                    correspondent=suggestion.suggested_correspondent_id,
+                    document_type=suggestion.suggested_type_id,
+                    storage_path=suggestion.suggested_storage_path_id,
+                    tags=tags,
+                )
+                applied_count += 1
+            except Exception as e:
+                console.print(
+                    f"[red]✗[/red] Failed to update document {suggestion.document_id}: {e}"
+                )
+                skipped_count += 1
+
+    console.print(f"\n[green]✓[/green] Applied changes to {applied_count} document(s)")
+    if skipped_count > 0:
+        console.print(f"[yellow]⚠️[/yellow] Skipped {skipped_count} document(s)")
+
+
+def _show_new_entities_review(new_entities):
+    """Display new entities for review."""
+    console.print("\n[bold]New Entities Detected:[/bold]\n")
+
+    if new_entities["correspondents"]:
+        console.print("[yellow]NEW CORRESPONDENTS:[/yellow]")
+        for name, doc_ids in new_entities["correspondents"].items():
+            console.print(f"  • {name} (found in {len(doc_ids)} documents)")
+
+
+def _create_new_entities(engine, new_entities):
+    """Create new entities in Paperless (only correspondents)."""
+    created = {"correspondents": 0}
+
+    with console.status("[bold green]Creating new correspondents...") as status:
+        # Create correspondents
+        for name in new_entities["correspondents"]:
+            try:
+                status.update(f"[bold green]Creating correspondent: {name}")
+                engine.paperless.create_correspondent(name)
+                created["correspondents"] += 1
+            except Exception as e:
+                console.print(f"[red]✗[/red] Failed to create correspondent '{name}': {e}")
+
+    # Invalidate cache so the engine will reload metadata
+    engine._correspondents = None
+    engine._load_metadata()
+
+    return created
 
 
 def _display_suggestion(suggestion):
@@ -156,7 +288,8 @@ def _display_suggestion(suggestion):
     current_type_display = suggestion.current_type_name or "[dim]None[/dim]"
     console.print(f"  Current Type: {current_type_display}")
     if suggestion.suggested_type:
-        console.print(f"  Suggested Type: [cyan]{suggestion.suggested_type}[/cyan]")
+        type_display = f"[cyan]{suggestion.suggested_type}[/cyan]"
+        console.print(f"  Suggested Type: {type_display}")
 
     # Tags
     current_tags_display = (
@@ -166,15 +299,34 @@ def _display_suggestion(suggestion):
     )
     console.print(f"  Current Tags: {current_tags_display}")
     if suggestion.suggested_tags:
-        console.print(f"  Suggested Tags: [cyan]{', '.join(suggestion.suggested_tags)}[/cyan]")
+        # Display all tags in cyan (no NEW tags anymore)
+        tag_display_parts = [f"[cyan]{tag}[/cyan]" for tag in suggestion.suggested_tags]
+        console.print(f"  Suggested Tags: {', '.join(tag_display_parts)}")
+        # Check if document has inbox tag - it will be preserved
+        has_inbox = any("inbox" in tag.lower() for tag in suggestion.current_tag_names)
+        if has_inbox:
+            console.print("  [dim]Note: Inbox tag will be preserved[/dim]")
 
     # Correspondent
     current_corr_display = suggestion.current_correspondent_name or "[dim]None[/dim]"
     console.print(f"  Current Correspondent: {current_corr_display}")
     if suggestion.suggested_correspondent:
-        console.print(
-            f"  Suggested Correspondent: [cyan]{suggestion.suggested_correspondent}[/cyan]"
-        )
+        if suggestion.suggested_correspondent_is_new:
+            corr_display = f"[yellow]NEW: {suggestion.suggested_correspondent}[/yellow]"
+        else:
+            corr_display = f"[cyan]{suggestion.suggested_correspondent}[/cyan]"
+        console.print(f"  Suggested Correspondent: {corr_display}")
+
+    # Storage Path
+    current_storage_display = suggestion.current_storage_path_name or "[dim]None[/dim]"
+    console.print(f"  Current Storage Path: {current_storage_display}")
+    if suggestion.suggested_storage_path:
+        storage_display = f"[cyan]{suggestion.suggested_storage_path}[/cyan]"
+        console.print(f"  Suggested Storage Path: {storage_display}")
+
+    # Show warning if there are NEW correspondents
+    if suggestion.suggested_correspondent_is_new:
+        console.print("  [yellow]⚠️  New correspondent will be created if --apply is used[/yellow]")
 
 
 if __name__ == "__main__":

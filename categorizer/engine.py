@@ -7,6 +7,7 @@ from paperless.models import (
     Correspondent,
     Document,
     DocumentType,
+    StoragePath,
     Tag,
 )
 
@@ -21,6 +22,11 @@ class CategorizationEngine:
         self._tags: list[Tag] | None = None
         self._correspondents: list[Correspondent] | None = None
         self._document_types: list[DocumentType] | None = None
+        self._storage_paths: list[StoragePath] | None = None
+        self.new_entities_found = {
+            "correspondents": {},  # name -> list of doc_ids
+        }
+        self.documents_with_new_entities: set[int] = set()  # Track which docs need re-processing
 
     def _load_metadata(self):
         """Load and cache all metadata from Paperless."""
@@ -30,6 +36,29 @@ class CategorizationEngine:
             self._correspondents = self.paperless.list_correspondents()
         if self._document_types is None:
             self._document_types = self.paperless.list_document_types()
+        if self._storage_paths is None:
+            self._storage_paths = self.paperless.list_storage_paths()
+
+    def _get_inbox_tag_id(self) -> int | None:
+        """Get the ID of the inbox tag, if it exists."""
+        for tag in self._tags:
+            if tag.is_inbox_tag:
+                return tag.id
+        return None
+
+    def get_or_create_parsed_tag(self) -> int:
+        """Get or create the 'paperless-ai-parsed' tag and return its ID."""
+        # Check if it already exists
+        for tag in self._tags:
+            if tag.name.lower() == "paperless-ai-parsed":
+                return tag.id
+
+        # Create it if it doesn't exist
+        new_tag = self.paperless.create_tag("paperless-ai-parsed")
+        # Invalidate cache and reload to include the new tag
+        self._tags = None
+        self._load_metadata()
+        return new_tag.id
 
     def categorize_document(self, document: Document) -> CategorizationSuggestion:
         """
@@ -40,6 +69,11 @@ class CategorizationEngine:
 
         Returns:
             CategorizationSuggestion with the analysis results
+
+        Note:
+            The Inbox tag is ALWAYS preserved if present on the document.
+            It will not be passed to Claude and will be automatically included
+            in suggested_tag_ids, allowing manual review and de-inbox workflow.
         """
         # Load metadata if not already loaded
         self._load_metadata()
@@ -48,6 +82,7 @@ class CategorizationEngine:
         current_type_name = self._get_type_name(document.document_type)
         current_tag_names = self._get_tag_names(document.tags)
         current_correspondent_name = self._get_correspondent_name(document.correspondent)
+        current_storage_path_name = self._get_storage_path_name(document.storage_path)
 
         # Skip if document has no content
         if not document.content or not document.content.strip():
@@ -60,18 +95,26 @@ class CategorizationEngine:
                 current_tag_names=current_tag_names,
                 current_correspondent=document.correspondent,
                 current_correspondent_name=current_correspondent_name,
+                current_storage_path=document.storage_path,
+                current_storage_path_name=current_storage_path_name,
                 status="error",
                 error_message="Document has no OCR content",
             )
 
         # Get available options
         available_types = [t.name for t in self._document_types]
-        available_tags = [t.name for t in self._tags]
+        # Exclude inbox tag from available tags - it's always preserved automatically
+        available_tags = [t.name for t in self._tags if not t.is_inbox_tag]
         available_correspondents = [c.name for c in self._correspondents]
+        available_storage_paths = [sp.name for sp in self._storage_paths]
 
         # Call Claude for categorization
         claude_response = self.claude.categorize_document(
-            document.content, available_types, available_tags, available_correspondents
+            document.content,
+            available_types,
+            available_tags,
+            available_correspondents,
+            available_storage_paths,
         )
 
         # Handle Claude errors
@@ -85,14 +128,48 @@ class CategorizationEngine:
                 current_tag_names=current_tag_names,
                 current_correspondent=document.correspondent,
                 current_correspondent_name=current_correspondent_name,
+                current_storage_path=document.storage_path,
+                current_storage_path_name=current_storage_path_name,
                 status="error",
                 error_message=claude_response.error,
             )
 
+        # Track new entities (only correspondents)
+        if claude_response.correspondent_is_new and claude_response.correspondent:
+            self.new_entities_found["correspondents"].setdefault(
+                claude_response.correspondent, []
+            ).append(document.id)
+            self.documents_with_new_entities.add(document.id)
+
         # Map Claude's suggestions to Paperless IDs
-        suggested_type_id = self._find_type_id(claude_response.document_type)
-        suggested_tag_ids = self._find_tag_ids(claude_response.tags or [])
-        suggested_correspondent_id = self._find_correspondent_id(claude_response.correspondent)
+        # Only existing entities will have IDs; new entities will be None
+        suggested_type_id = (
+            self._find_type_id(claude_response.document_type)
+            if not claude_response.document_type_is_new
+            else None
+        )
+        suggested_tag_ids = (
+            self._find_tag_ids(claude_response.tags_existing or [])
+            if claude_response.tags_existing
+            else []
+        )
+
+        # ALWAYS preserve the inbox tag if it's currently on the document
+        inbox_tag_id = self._get_inbox_tag_id()
+        if inbox_tag_id and inbox_tag_id in document.tags and inbox_tag_id not in suggested_tag_ids:
+            suggested_tag_ids.append(inbox_tag_id)
+
+        suggested_correspondent_id = (
+            self._find_correspondent_id(claude_response.correspondent)
+            if not claude_response.correspondent_is_new
+            else None
+        )
+
+        suggested_storage_path_id = (
+            self._find_storage_path_id(claude_response.storage_path)
+            if not claude_response.storage_path_is_new
+            else None
+        )
 
         return CategorizationSuggestion(
             document_id=document.id,
@@ -102,14 +179,23 @@ class CategorizationEngine:
             current_type_name=current_type_name,
             suggested_type=claude_response.document_type,
             suggested_type_id=suggested_type_id,
+            suggested_type_is_new=claude_response.document_type_is_new,
             current_tags=document.tags,
             current_tag_names=current_tag_names,
             suggested_tags=claude_response.tags or [],
+            suggested_tags_existing=claude_response.tags_existing or [],
+            suggested_tags_new=claude_response.tags_new or [],
             suggested_tag_ids=suggested_tag_ids,
             current_correspondent=document.correspondent,
             current_correspondent_name=current_correspondent_name,
             suggested_correspondent=claude_response.correspondent,
             suggested_correspondent_id=suggested_correspondent_id,
+            suggested_correspondent_is_new=claude_response.correspondent_is_new,
+            current_storage_path=document.storage_path,
+            current_storage_path_name=current_storage_path_name,
+            suggested_storage_path=claude_response.storage_path,
+            suggested_storage_path_id=suggested_storage_path_id,
+            suggested_storage_path_is_new=claude_response.storage_path_is_new,
             status="success",
         )
 
@@ -170,4 +256,23 @@ class CategorizationEngine:
         for corr in self._correspondents:
             if corr.name.lower() == correspondent_name_lower:
                 return corr.id
+        return None
+
+    def _get_storage_path_name(self, storage_path_id: int | None) -> str | None:
+        """Get storage path name from ID."""
+        if storage_path_id is None:
+            return None
+        for spath in self._storage_paths:
+            if spath.id == storage_path_id:
+                return spath.name
+        return None
+
+    def _find_storage_path_id(self, storage_path_name: str | None) -> int | None:
+        """Find storage path ID by name (case-insensitive)."""
+        if not storage_path_name:
+            return None
+        storage_path_name_lower = storage_path_name.lower()
+        for spath in self._storage_paths:
+            if spath.name.lower() == storage_path_name_lower:
+                return spath.id
         return None
