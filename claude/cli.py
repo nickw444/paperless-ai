@@ -73,7 +73,13 @@ class ClaudeClient:
                     continue
                 return ClaudeResponse(error="Claude request timed out after multiple retries")
             except subprocess.CalledProcessError as e:
-                return ClaudeResponse(error=f"Claude CLI error: {e.stderr.decode()}")
+                # stderr/stdout are already strings due to text=True in subprocess.run
+                error_msg = f"Claude CLI failed with exit code {e.returncode}"
+                if e.stderr:
+                    error_msg += f"\nStderr: {e.stderr.strip()}"
+                if e.stdout:
+                    error_msg += f"\nStdout: {e.stdout.strip()}"
+                return ClaudeResponse(error=error_msg)
             except Exception as e:
                 return ClaudeResponse(error=f"Unexpected error: {str(e)}")
 

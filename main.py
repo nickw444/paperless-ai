@@ -280,49 +280,52 @@ def _display_suggestion(suggestion):
         return
 
     # Title
-    console.print(f'  Current Title: [dim]"{suggestion.current_title}"[/dim]')
-    if suggestion.suggested_title:
-        console.print(f'  Suggested Title: [cyan]"{suggestion.suggested_title}"[/cyan]')
+    current_title = f'"{suggestion.current_title}"'
+    suggested_title = f'"{suggestion.suggested_title}"' if suggestion.suggested_title else None
+    if suggested_title and current_title != suggested_title:
+        console.print(f"  Title: [dim]{current_title}[/dim] -> [cyan]{suggested_title}[/cyan]")
+    else:
+        console.print(f"  Title: {current_title}")
 
     # Type
-    current_type_display = suggestion.current_type_name or "[dim]None[/dim]"
-    console.print(f"  Current Type: {current_type_display}")
-    if suggestion.suggested_type:
-        type_display = f"[cyan]{suggestion.suggested_type}[/cyan]"
-        console.print(f"  Suggested Type: {type_display}")
+    current_type = suggestion.current_type_name or "None"
+    suggested_type = suggestion.suggested_type
+    if suggested_type and current_type.lower() != suggested_type.lower():
+        console.print(f"  Type: [dim]{current_type}[/dim] -> [cyan]{suggested_type}[/cyan]")
+    elif current_type != "None":
+        console.print(f"  Type: {current_type}")
 
     # Tags
-    current_tags_display = (
-        ", ".join(suggestion.current_tag_names)
-        if suggestion.current_tag_names
-        else "[dim]None[/dim]"
+    current_tags = (
+        ", ".join(suggestion.current_tag_names) if suggestion.current_tag_names else "None"
     )
-    console.print(f"  Current Tags: {current_tags_display}")
-    if suggestion.suggested_tags:
-        # Display all tags in cyan (no NEW tags anymore)
-        tag_display_parts = [f"[cyan]{tag}[/cyan]" for tag in suggestion.suggested_tags]
-        console.print(f"  Suggested Tags: {', '.join(tag_display_parts)}")
-        # Check if document has inbox tag - it will be preserved
-        has_inbox = any("inbox" in tag.lower() for tag in suggestion.current_tag_names)
-        if has_inbox:
-            console.print("  [dim]Note: Inbox tag will be preserved[/dim]")
+    suggested_tags = ", ".join(suggestion.suggested_tags) if suggestion.suggested_tags else None
+    if suggested_tags and current_tags.lower() != suggested_tags.lower():
+        console.print(f"  Tags: [dim]{current_tags}[/dim] -> [cyan]{suggested_tags}[/cyan]")
+    elif current_tags != "None":
+        console.print(f"  Tags: {current_tags}")
 
     # Correspondent
-    current_corr_display = suggestion.current_correspondent_name or "[dim]None[/dim]"
-    console.print(f"  Current Correspondent: {current_corr_display}")
-    if suggestion.suggested_correspondent:
+    current_corr = suggestion.current_correspondent_name or "None"
+    suggested_corr = suggestion.suggested_correspondent
+    if suggested_corr and current_corr.lower() != suggested_corr.lower():
         if suggestion.suggested_correspondent_is_new:
-            corr_display = f"[yellow]NEW: {suggestion.suggested_correspondent}[/yellow]"
+            corr_display = f"[yellow]NEW: {suggested_corr}[/yellow]"
         else:
-            corr_display = f"[cyan]{suggestion.suggested_correspondent}[/cyan]"
-        console.print(f"  Suggested Correspondent: {corr_display}")
+            corr_display = f"[cyan]{suggested_corr}[/cyan]"
+        console.print(f"  Correspondent: [dim]{current_corr}[/dim] -> {corr_display}")
+    elif current_corr != "None":
+        console.print(f"  Correspondent: {current_corr}")
 
     # Storage Path
-    current_storage_display = suggestion.current_storage_path_name or "[dim]None[/dim]"
-    console.print(f"  Current Storage Path: {current_storage_display}")
-    if suggestion.suggested_storage_path:
-        storage_display = f"[cyan]{suggestion.suggested_storage_path}[/cyan]"
-        console.print(f"  Suggested Storage Path: {storage_display}")
+    current_storage = suggestion.current_storage_path_name or "None"
+    suggested_storage = suggestion.suggested_storage_path
+    if suggested_storage and current_storage.lower() != suggested_storage.lower():
+        console.print(
+            f"  Storage Path: [dim]{current_storage}[/dim] -> [cyan]{suggested_storage}[/cyan]"
+        )
+    elif current_storage != "None":
+        console.print(f"  Storage Path: {current_storage}")
 
     # Show warning if there are NEW correspondents
     if suggestion.suggested_correspondent_is_new:
