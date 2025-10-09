@@ -183,7 +183,15 @@ STORAGE_PATH: <existing storage path or "None">"""
 
             # Execute Claude CLI
             result = subprocess.run(
-                [self.claude_command, "--model", "sonnet", "-p", prompt, "--session-id", session_id],
+                [
+                    self.claude_command,
+                    "--model",
+                    "sonnet",
+                    "-p",
+                    prompt,
+                    "--session-id",
+                    session_id,
+                ],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
