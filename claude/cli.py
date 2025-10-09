@@ -3,6 +3,7 @@
 import subprocess
 import tempfile
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -139,9 +140,20 @@ NORMALIZATION FOR NEW CORRESPONDENTS:
   - "PG&E - Pacific Gas & Electric" → "NEW: Pacific Gas & Electric"
 - Avoid URLs, legal suffixes (Inc., LLC), or extra punctuation unless essential
 
-MATCHING FOR TAGS, TYPES, AND STORAGE PATHS:
-- Always select from existing options, choosing the best match
-- For tags: select all relevant tags that apply
+SEMANTIC TAG MATCHING - CRITICAL:
+- Tags should reflect what the document IS ABOUT, not just keywords that appear in it
+- Think about the document's PURPOSE and SUBJECT MATTER
+- Examples of CORRECT tagging:
+  - Utility bill for 123 Main St → tag "123 Main St" (document is ABOUT that property)
+  - Payslip mentioning 123 Main St as home address → DON'T tag "123 Main St" (not about property)
+  - Travel insurance with 123 Main St → DON'T tag "123 Main St" (not about property)
+  - Strata notice for Unit 5 → tag for that address (document is ABOUT property management)
+  - Vet invoice for dog "Max" → tag "Max" (document is ABOUT that pet)
+  - Resume mentioning "Max" as a name → DON'T tag "Max" (not about that pet)
+- Ask yourself: "Is this document primarily ABOUT [tag concept]?" If no, don't use the tag
+- Only select tags that describe the document's core subject matter
+
+MATCHING FOR DOCUMENT TYPES AND STORAGE PATHS:
 - For document type: select the single best match (or "None" if nothing fits)
 - For storage path: select the best match (or "None" if unsure)
 
@@ -165,9 +177,13 @@ STORAGE_PATH: <existing storage path or "None">"""
             # Replace placeholder with actual temp file path
             prompt = prompt_template.replace("{TEMP_FILE}", temp_path)
 
+            # Generate a unique session ID to ensure complete isolation between calls
+            # This prevents conversation context from accumulating across documents
+            session_id = str(uuid.uuid4())
+
             # Execute Claude CLI
             result = subprocess.run(
-                [self.claude_command, "-p", prompt],
+                [self.claude_command, "--model", "sonnet", "-p", prompt, "--session-id", session_id],
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
