@@ -35,6 +35,7 @@ class ClaudeClient:
         """Initialize the Claude CLI client."""
         self.claude_command = settings.claude_command
         self.timeout = settings.claude_timeout
+        self.max_content_chars = settings.claude_max_content_chars
         self.max_retries = 3
 
     def categorize_document(
@@ -176,11 +177,17 @@ STORAGE_PATH: <existing storage path or "None">"""
 
     def _call_claude(self, ocr_content: str, prompt_template: str) -> str:
         """Execute Claude CLI with the document content."""
+        # Truncate content if needed to save tokens
+        content_to_analyze = ocr_content
+        if len(ocr_content) > self.max_content_chars:
+            content_to_analyze = ocr_content[: self.max_content_chars]
+            content_to_analyze += f"\n\n[Content truncated at {self.max_content_chars} characters]"
+
         # Create a temporary file for the OCR content
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".txt", delete=False, prefix="paperless_doc_"
         ) as temp_file:
-            temp_file.write(ocr_content)
+            temp_file.write(content_to_analyze)
             temp_path = temp_file.name
 
         try:

@@ -106,6 +106,12 @@ class CategorizationEngine:
         # Exclude inbox tag from available tags - it's always preserved automatically
         available_tags = [t.name for t in self._tags if not t.is_inbox_tag]
         available_correspondents = [c.name for c in self._correspondents]
+
+        # Include pending new correspondents from previous documents in this batch
+        # This prevents duplicate "NEW: Foo" suggestions for the same correspondent
+        pending_new_correspondents = list(self.new_entities_found["correspondents"].keys())
+        available_correspondents.extend(pending_new_correspondents)
+
         available_storage_paths = [sp.name for sp in self._storage_paths]
 
         # Call Claude for categorization
@@ -134,11 +140,26 @@ class CategorizationEngine:
                 error_message=claude_response.error,
             )
 
+        # Check if correspondent is pending from a previous document in this batch
+        correspondent_is_pending = (
+            claude_response.correspondent in pending_new_correspondents
+            if claude_response.correspondent
+            else False
+        )
+
         # Track new entities (only correspondents)
+        # This includes both: correspondents Claude marked as NEW, and correspondents that matched
+        # pending ones from previous documents in this batch
         if claude_response.correspondent_is_new and claude_response.correspondent:
             self.new_entities_found["correspondents"].setdefault(
                 claude_response.correspondent, []
             ).append(document.id)
+            self.documents_with_new_entities.add(document.id)
+        elif correspondent_is_pending and claude_response.correspondent:
+            # Claude matched a pending correspondent from a previous doc in this batch
+            self.new_entities_found["correspondents"][claude_response.correspondent].append(
+                document.id
+            )
             self.documents_with_new_entities.add(document.id)
 
         # Map Claude's suggestions to Paperless IDs
@@ -159,11 +180,18 @@ class CategorizationEngine:
         if inbox_tag_id and inbox_tag_id in document.tags and inbox_tag_id not in suggested_tag_ids:
             suggested_tag_ids.append(inbox_tag_id)
 
-        suggested_correspondent_id = (
-            self._find_correspondent_id(claude_response.correspondent)
-            if not claude_response.correspondent_is_new
-            else None
-        )
+        if correspondent_is_pending:
+            # Treat as new even though Claude didn't mark it as NEW
+            # (because we added it to available list from previous docs in batch)
+            suggested_correspondent_id = None
+            suggested_correspondent_is_new = True
+        else:
+            suggested_correspondent_id = (
+                self._find_correspondent_id(claude_response.correspondent)
+                if not claude_response.correspondent_is_new
+                else None
+            )
+            suggested_correspondent_is_new = claude_response.correspondent_is_new
 
         suggested_storage_path_id = (
             self._find_storage_path_id(claude_response.storage_path)
@@ -190,7 +218,7 @@ class CategorizationEngine:
             current_correspondent_name=current_correspondent_name,
             suggested_correspondent=claude_response.correspondent,
             suggested_correspondent_id=suggested_correspondent_id,
-            suggested_correspondent_is_new=claude_response.correspondent_is_new,
+            suggested_correspondent_is_new=suggested_correspondent_is_new,
             current_storage_path=document.storage_path,
             current_storage_path_name=current_storage_path_name,
             suggested_storage_path=claude_response.storage_path,

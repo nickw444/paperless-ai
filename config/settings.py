@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     paperless_api_token: str = Field(..., description="API token for Paperless-ngx")
     claude_command: str = Field(default="claude", description="Path to Claude CLI")
     claude_timeout: int = Field(default=30, description="Timeout for Claude responses in seconds")
+    claude_max_content_chars: int = Field(
+        default=2000, description="Maximum characters of document content to send to Claude"
+    )
 
     @field_validator("paperless_url")
     @classmethod
@@ -47,6 +50,10 @@ def load_settings() -> Settings:
         print("\nOptional environment variables:", file=sys.stderr)
         print("  - CLAUDE_COMMAND: Path to Claude CLI (default: claude)", file=sys.stderr)
         print("  - CLAUDE_TIMEOUT: Timeout in seconds (default: 30)", file=sys.stderr)
+        print(
+            "  - CLAUDE_MAX_CONTENT_CHARS: Max document chars to analyze (default: 2000)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
 
