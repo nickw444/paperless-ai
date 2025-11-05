@@ -33,9 +33,12 @@ paperless-ai/
 │   ├── __init__.py
 │   ├── client.py          # API client
 │   └── models.py          # Data models
-├── claude/                 # Claude interaction
+├── llm/                    # AI agent implementations
 │   ├── __init__.py
-│   └── cli.py            # CLI wrapper for Claude
+│   ├── base.py
+│   ├── factory.py
+│   ├── claude.py        # Claude CLI wrapper
+│   └── codex.py         # Codex CLI wrapper
 ├── categorizer/           # Core categorization logic
 │   ├── __init__.py
 │   └── engine.py         # Orchestrates the categorization process
@@ -58,11 +61,11 @@ paperless-ai/
   - [ ] Storage paths
 - [ ] ~~Update document metadata~~ (DISABLED in Phase 1 - read-only mode)
 
-### 2. Claude CLI Wrapper (`claude/cli.py`)
+### 2. LLM CLI Wrappers (`llm/claude.py`, `llm/codex.py`)
 - [ ] Create temporary file in /tmp for OCR content (avoid command line length limits)
 - [ ] Build prompt that references the temp file path
-- [ ] Execute Claude via subprocess: `claude -p "prompt with @/tmp/filename"`
-- [ ] Parse Claude's response (assume structured text output)
+- [ ] Execute configured agent via subprocess (Claude: `claude -p "prompt with @/tmp/filename"`, Codex via stdin)
+- [ ] Parse the agent response (assume structured text output)
 - [ ] Clean up temp file after processing (use context manager)
 - [ ] Handle errors and timeouts
 - [ ] Implement retry logic

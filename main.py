@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from categorizer.engine import CategorizationEngine
+from llm.factory import create_agent
 from paperless.client import PaperlessClient
 
 console = Console()
@@ -15,7 +16,7 @@ console = Console()
 
 @click.group()
 def cli():
-    """Paperless-AI: Automated document categorization using Claude."""
+    """Paperless-AI: Automated document categorization using configurable AI agents."""
     pass
 
 
@@ -89,7 +90,8 @@ def list_inbox(output):
 def analyze(doc_id, output, limit, export, apply):
     """Analyze inbox documents and suggest categorizations."""
     try:
-        engine = CategorizationEngine()
+        agent = create_agent()
+        engine = CategorizationEngine(agent=agent)
         client = engine.paperless
 
         # Get documents to analyze

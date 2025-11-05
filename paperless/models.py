@@ -78,7 +78,7 @@ class Document(BaseModel):
 
 
 class CategorizationSuggestion(BaseModel):
-    """Claude's categorization suggestion for a document."""
+    """AI agent categorization suggestion for a document."""
 
     document_id: int
     current_title: str

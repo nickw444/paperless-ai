@@ -1,6 +1,6 @@
 """Categorization engine that orchestrates document analysis."""
 
-from claude.cli import ClaudeClient
+from llm.base import CommandLineAgent
 from paperless.client import PaperlessClient
 from paperless.models import (
     CategorizationSuggestion,
@@ -13,12 +13,12 @@ from paperless.models import (
 
 
 class CategorizationEngine:
-    """Engine for categorizing documents using Claude and Paperless metadata."""
+    """Engine for categorizing documents using LLM agents and Paperless metadata."""
 
-    def __init__(self):
+    def __init__(self, agent: CommandLineAgent):
         """Initialize the categorization engine."""
         self.paperless = PaperlessClient()
-        self.claude = ClaudeClient()
+        self.agent = agent
         self._tags: list[Tag] | None = None
         self._correspondents: list[Correspondent] | None = None
         self._document_types: list[DocumentType] | None = None
@@ -72,7 +72,7 @@ class CategorizationEngine:
 
         Note:
             The Inbox tag is ALWAYS preserved if present on the document.
-            It will not be passed to Claude and will be automatically included
+            It will not be passed to the agent and will be automatically included
             in suggested_tag_ids, allowing manual review and de-inbox workflow.
         """
         # Load metadata if not already loaded
@@ -114,8 +114,8 @@ class CategorizationEngine:
 
         available_storage_paths = [sp.name for sp in self._storage_paths]
 
-        # Call Claude for categorization
-        claude_response = self.claude.categorize_document(
+        # Call the configured agent for categorization
+        agent_response = self.agent.categorize_document(
             document.content,
             available_types,
             available_tags,
@@ -123,8 +123,8 @@ class CategorizationEngine:
             available_storage_paths,
         )
 
-        # Handle Claude errors
-        if claude_response.error:
+        # Handle agent errors
+        if agent_response.error:
             return CategorizationSuggestion(
                 document_id=document.id,
                 current_title=document.title,
@@ -137,41 +137,41 @@ class CategorizationEngine:
                 current_storage_path=document.storage_path,
                 current_storage_path_name=current_storage_path_name,
                 status="error",
-                error_message=claude_response.error,
+                error_message=agent_response.error,
             )
 
         # Check if correspondent is pending from a previous document in this batch
         correspondent_is_pending = (
-            claude_response.correspondent in pending_new_correspondents
-            if claude_response.correspondent
+            agent_response.correspondent in pending_new_correspondents
+            if agent_response.correspondent
             else False
         )
 
         # Track new entities (only correspondents)
-        # This includes both: correspondents Claude marked as NEW, and correspondents that matched
-        # pending ones from previous documents in this batch
-        if claude_response.correspondent_is_new and claude_response.correspondent:
+        # Includes ones the agent marked as NEW and ones that matched pending
+        # correspondents from previous documents in this batch
+        if agent_response.correspondent_is_new and agent_response.correspondent:
             self.new_entities_found["correspondents"].setdefault(
-                claude_response.correspondent, []
+                agent_response.correspondent, []
             ).append(document.id)
             self.documents_with_new_entities.add(document.id)
-        elif correspondent_is_pending and claude_response.correspondent:
-            # Claude matched a pending correspondent from a previous doc in this batch
-            self.new_entities_found["correspondents"][claude_response.correspondent].append(
+        elif correspondent_is_pending and agent_response.correspondent:
+            # The agent matched a pending correspondent from a previous doc in this batch
+            self.new_entities_found["correspondents"][agent_response.correspondent].append(
                 document.id
             )
             self.documents_with_new_entities.add(document.id)
 
-        # Map Claude's suggestions to Paperless IDs
+        # Map the agent's suggestions to Paperless IDs
         # Only existing entities will have IDs; new entities will be None
         suggested_type_id = (
-            self._find_type_id(claude_response.document_type)
-            if not claude_response.document_type_is_new
+            self._find_type_id(agent_response.document_type)
+            if not agent_response.document_type_is_new
             else None
         )
         suggested_tag_ids = (
-            self._find_tag_ids(claude_response.tags_existing or [])
-            if claude_response.tags_existing
+            self._find_tag_ids(agent_response.tags_existing or [])
+            if agent_response.tags_existing
             else []
         )
 
@@ -181,49 +181,49 @@ class CategorizationEngine:
             suggested_tag_ids.append(inbox_tag_id)
 
         if correspondent_is_pending:
-            # Treat as new even though Claude didn't mark it as NEW
+            # Treat as new even though the agent didn't mark it as NEW
             # (because we added it to available list from previous docs in batch)
             suggested_correspondent_id = None
             suggested_correspondent_is_new = True
         else:
             suggested_correspondent_id = (
-                self._find_correspondent_id(claude_response.correspondent)
-                if not claude_response.correspondent_is_new
+                self._find_correspondent_id(agent_response.correspondent)
+                if not agent_response.correspondent_is_new
                 else None
             )
-            suggested_correspondent_is_new = claude_response.correspondent_is_new
+            suggested_correspondent_is_new = agent_response.correspondent_is_new
 
         suggested_storage_path_id = (
-            self._find_storage_path_id(claude_response.storage_path)
-            if not claude_response.storage_path_is_new
+            self._find_storage_path_id(agent_response.storage_path)
+            if not agent_response.storage_path_is_new
             else None
         )
 
         return CategorizationSuggestion(
             document_id=document.id,
             current_title=document.title,
-            suggested_title=claude_response.title,
+            suggested_title=agent_response.title,
             current_type=document.document_type,
             current_type_name=current_type_name,
-            suggested_type=claude_response.document_type,
+            suggested_type=agent_response.document_type,
             suggested_type_id=suggested_type_id,
-            suggested_type_is_new=claude_response.document_type_is_new,
+            suggested_type_is_new=agent_response.document_type_is_new,
             current_tags=document.tags,
             current_tag_names=current_tag_names,
-            suggested_tags=claude_response.tags or [],
-            suggested_tags_existing=claude_response.tags_existing or [],
-            suggested_tags_new=claude_response.tags_new or [],
+            suggested_tags=agent_response.tags or [],
+            suggested_tags_existing=agent_response.tags_existing or [],
+            suggested_tags_new=agent_response.tags_new or [],
             suggested_tag_ids=suggested_tag_ids,
             current_correspondent=document.correspondent,
             current_correspondent_name=current_correspondent_name,
-            suggested_correspondent=claude_response.correspondent,
+            suggested_correspondent=agent_response.correspondent,
             suggested_correspondent_id=suggested_correspondent_id,
             suggested_correspondent_is_new=suggested_correspondent_is_new,
             current_storage_path=document.storage_path,
             current_storage_path_name=current_storage_path_name,
-            suggested_storage_path=claude_response.storage_path,
+            suggested_storage_path=agent_response.storage_path,
             suggested_storage_path_id=suggested_storage_path_id,
-            suggested_storage_path_is_new=claude_response.storage_path_is_new,
+            suggested_storage_path_is_new=agent_response.storage_path_is_new,
             status="success",
         )
 

@@ -1,29 +1,29 @@
 # paperless-ai
 
-Automated document categorization for Paperless-ngx using Claude AI via the Claude Code CLI.
+Automated document categorization for Paperless-ngx using CLI-based AI agents (Claude Code by default, with optional Codex support).
 
 ## What it does
 
-paperless-ai analyzes documents in your Paperless-ngx inbox and suggests appropriate metadata (titles, tags, correspondents, document types, and storage paths). It uses the [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) to read OCR content and make intelligent categorization decisions based on your existing Paperless setup.
+paperless-ai analyzes documents in your Paperless-ngx inbox and suggests appropriate metadata (titles, tags, correspondents, document types, and storage paths). It integrates with CLI tooling to read OCR content and make intelligent categorization decisions based on your existing Paperless setup. Claude Code remains the default integration, and the Codex CLI can be enabled when preferred.
 
-By using Claude Code instead of the Claude API, you can process documents without paying per-token costs if you already have a Claude subscription (Pro or other paid plan). This makes it economical to categorize large batches of documents.
+By using a CLI agent instead of a direct API, you can process documents using the subscriptions you already have (for example Claude Pro) without paying per-token API costs. This makes it economical to categorize large batches of documents.
 
 ## Purpose
 
 Manually categorizing documents in Paperless-ngx is time-consuming. This tool automates the process by:
 
-- Analyzing document content using Claude AI via your existing subscription
+- Analyzing document content using the configured agent (Claude by default)
 - Suggesting metadata based on your existing tags, correspondents, types, and storage paths
 - Learning your organizational patterns by matching against existing entities
 - Creating new correspondents when needed (with ML matching enabled)
 - Allowing review before applying changes
-- Avoiding API token costs by leveraging Claude Code
+- Avoiding API token costs by leveraging CLI agents instead of direct APIs
 
 ## How it works
 
 1. **Fetch documents**: Retrieves uncategorized documents from your Paperless-ngx inbox
-2. **Analyze content**: Sends OCR text to Claude AI along with your available metadata options
-3. **Generate suggestions**: Claude suggests appropriate categorizations, preferring existing entities
+2. **Analyze content**: Sends OCR text to the configured agent along with your available metadata options
+3. **Generate suggestions**: The agent suggests appropriate categorizations, preferring existing entities
 4. **Review**: Displays suggestions in a formatted table for your review
 5. **Apply changes**: Optionally updates documents in Paperless-ngx and tags them as processed
 
@@ -44,9 +44,23 @@ Create a `.env` file or set environment variables:
 ```bash
 PAPERLESS_URL=http://your-paperless-instance
 PAPERLESS_API_TOKEN=your-api-token
+
+# Agent selection (default: claude)
+AI_AGENT=claude        # or codex (required when using Codex CLI)
+
+# Claude configuration
 CLAUDE_COMMAND=claude  # Path to Claude CLI
+CLAUDE_MODEL=sonnet    # Optional override
 CLAUDE_TIMEOUT=120     # Timeout in seconds
+
+# Codex configuration (used when AI_AGENT=codex)
+CODEX_COMMAND=codex
+CODEX_MODEL=gpt-5          # Optional, defaults to gpt-5
+CODEX_TIMEOUT=120
+CODEX_REASONING_EFFORT=minimal
 ```
+
+Both agents share the same `CLAUDE_MAX_CONTENT_CHARS` setting by default; set `CODEX_MAX_CONTENT_CHARS` if you need a different limit when using Codex.
 
 ## Usage
 
@@ -87,7 +101,7 @@ python main.py analyze --export suggestions.json
 
 ## Features
 
-- **Intelligent matching**: Claude tries to match existing entities before suggesting new ones
+- **Intelligent matching**: The LLM agent tries to match existing entities before suggesting new ones
 - **Correspondent creation**: Suggests new correspondents when none match, with ML auto-matching enabled
 - **Batch processing**: Process documents incrementally with `--limit`
 - **Incremental workflow**: Already-processed documents are automatically excluded
