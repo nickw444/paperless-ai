@@ -6,6 +6,7 @@ from config.settings import settings
 from llm.base import CommandLineAgent
 from llm.claude import ClaudeClient
 from llm.codex import CodexClient
+from llm.opencode import OpencodeClient
 
 
 def create_agent() -> CommandLineAgent:
@@ -17,5 +18,8 @@ def create_agent() -> CommandLineAgent:
 
     if provider == "claude":
         return ClaudeClient()
+
+    if provider == "opencode":
+        return OpencodeClient()
 
     raise ValueError(f"Unsupported AI agent provider '{settings.ai_agent}'")
