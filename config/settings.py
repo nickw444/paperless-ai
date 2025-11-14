@@ -54,6 +54,10 @@ class Settings(BaseSettings):
         default="opencode/grok-code",
         description="Opencode model to use",
     )
+    rate_limit_documents_per_minute: int = Field(
+        default=0,
+        description="Rate limit for document processing (0=no limit, docs/minute)",
+    )
 
     @field_validator("paperless_url")
     @classmethod

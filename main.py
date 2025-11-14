@@ -2,16 +2,26 @@
 
 import json
 import sys
+import time
 
 import click
 from rich.console import Console
 from rich.table import Table
 
 from categorizer.engine import CategorizationEngine
+from config.settings import settings
 from llm.factory import create_agent
 from paperless.client import PaperlessClient
 
 console = Console()
+
+
+def _apply_rate_limit():
+    """Apply rate limiting if configured."""
+    rate_limit = settings.rate_limit_documents_per_minute
+    if rate_limit > 0:
+        delay = 60 / rate_limit  # seconds between documents
+        time.sleep(delay)
 
 
 @click.group()
@@ -85,9 +95,11 @@ def list_inbox(output):
     "--output", type=click.Choice(["table", "json"]), default="table", help="Output format"
 )
 @click.option("--limit", type=int, help="Process only first N documents")
+@click.option("--offset", type=int, help="Skip first N documents before processing")
 @click.option("--export", type=click.Path(), help="Export suggestions to file (JSON)")
 @click.option("--apply", is_flag=True, help="Apply changes after review")
-def analyze(doc_id, output, limit, export, apply):
+@click.option("--yes", "-y", is_flag=True, help="Automatically apply changes without prompts")
+def analyze(doc_id, output, limit, offset, export, apply, yes):
     """Analyze inbox documents and suggest categorizations."""
     try:
         agent = create_agent()
@@ -103,14 +115,17 @@ def analyze(doc_id, output, limit, export, apply):
             try:
                 # Check if parsed tag exists, but don't create it yet
                 engine._load_metadata()
-                for tag in engine._tags:
-                    if tag.name.lower() == "paperless-ai-parsed":
-                        parsed_tag_id = tag.id
-                        break
+                if engine._tags:
+                    for tag in engine._tags:
+                        if tag.name.lower() == "paperless-ai-parsed":
+                            parsed_tag_id = tag.id
+                            break
             except Exception:
                 pass  # If we can't check, continue without filtering
 
             documents = client.list_inbox_documents(exclude_tag_id=parsed_tag_id)
+            if offset:
+                documents = documents[offset:]
             if limit:
                 documents = documents[:limit]
 
@@ -125,6 +140,7 @@ def analyze(doc_id, output, limit, export, apply):
                 status.update(f"[bold green]Analyzing document {i}/{len(documents)}...")
                 suggestion = engine.categorize_document(doc)
                 suggestions.append(suggestion)
+                _apply_rate_limit()
 
         # Export if requested
         if export:
@@ -145,7 +161,7 @@ def analyze(doc_id, output, limit, export, apply):
             _show_new_entities_review(engine.new_entities_found)
 
             if apply:
-                if click.confirm("\nCreate these new correspondents in Paperless?"):
+                if yes or click.confirm("\nCreate these new correspondents in Paperless?"):
                     created = _create_new_entities(engine, engine.new_entities_found)
                     console.print(
                         f"[green]✓[/green] Created {created['correspondents']} new correspondent(s)"
@@ -154,7 +170,7 @@ def analyze(doc_id, output, limit, export, apply):
                     # Re-run categorization ONLY for documents with NEW correspondents
                     if engine.documents_with_new_entities:
                         count = len(engine.documents_with_new_entities)
-                        if click.confirm(
+                        if yes or click.confirm(
                             f"\nRe-categorize {count} documents that had new correspondents?"
                         ):
                             docs_to_reprocess = [
@@ -173,6 +189,7 @@ def analyze(doc_id, output, limit, export, apply):
                                     )
                                     new_suggestion = engine.categorize_document(doc)
                                     new_suggestions.append(new_suggestion)
+                                    _apply_rate_limit()
                             # Replace old suggestions with new ones
                             for new_sugg in new_suggestions:
                                 for i, old_sugg in enumerate(suggestions):
@@ -182,7 +199,7 @@ def analyze(doc_id, output, limit, export, apply):
 
         # Apply changes if requested
         if apply and suggestions:
-            if click.confirm("\nApply categorization suggestions to documents?"):
+            if yes or click.confirm("\nApply categorization suggestions to documents?"):
                 _apply_suggestions(engine, suggestions)
 
     except Exception as e:
