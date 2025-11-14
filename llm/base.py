@@ -203,8 +203,12 @@ SEMANTIC TAG MATCHING - CRITICAL:
   - Strata notice for Unit 5 → tag for that address (document is ABOUT property management)
   - Vet invoice for dog "Max" → tag "Max" (document is ABOUT that pet)
   - Resume mentioning "Max" as a name → DON'T tag "Max" (not about that pet)
+  - Receipt for charitable donation → tag "Tax Deduction" (document is about a deductible expense)
+  - Home office expense receipt → tag "Tax Deduction" (document is about a deductible expense)
+  - Bill, invoice or receipt labeled "Tax Invoice" → DON'T tag "Tax" or "Tax Deduction" unless it satisfied the previous rules
 - Ask yourself: "Is this document primarily ABOUT [tag concept]?" If no, don't use the tag
 - Only select tags that describe the document's core subject matter
+- For "Tax" and "Tax Deduction" tags: Only apply to documents that represent actual deductible expenses (donations, home office, income-producing costs, etc.) - NOT to documents that merely mention tax or are labeled as tax invoices
 
 MATCHING FOR DOCUMENT TYPES AND STORAGE PATHS:
 - For document type: select the single best match (or "None" if nothing fits)
