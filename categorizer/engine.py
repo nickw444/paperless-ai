@@ -1,5 +1,6 @@
 """Categorization engine that orchestrates document analysis."""
 
+from config.settings import settings
 from llm.base import CommandLineAgent
 from paperless.client import PaperlessClient
 from paperless.models import (
@@ -39,12 +40,16 @@ class CategorizationEngine:
         if self._storage_paths is None:
             self._storage_paths = self.paperless.list_storage_paths()
 
-    def _get_inbox_tag_id(self) -> int | None:
-        """Get the ID of the inbox tag, if it exists."""
+    def _get_protected_tag_ids(self) -> list[int]:
+        """Get the IDs of all protected tags configured in settings."""
+        protected_tag_ids = []
+        protected_tag_names = [name.lower() for name in settings.protected_tags]
+
         for tag in self._tags:
-            if tag.is_inbox_tag:
-                return tag.id
-        return None
+            if tag.name.lower() in protected_tag_names:
+                protected_tag_ids.append(tag.id)
+
+        return protected_tag_ids
 
     def get_or_create_parsed_tag(self) -> int:
         """Get or create the 'paperless-ai-parsed' tag and return its ID."""
@@ -71,9 +76,9 @@ class CategorizationEngine:
             CategorizationSuggestion with the analysis results
 
         Note:
-            The Inbox tag is ALWAYS preserved if present on the document.
-            It will not be passed to the agent and will be automatically included
-            in suggested_tag_ids, allowing manual review and de-inbox workflow.
+            Protected tags configured in settings are ALWAYS preserved if present on the document.
+            They will not be passed to the agent and will be automatically included
+            in suggested_tag_ids, allowing manual review workflows.
         """
         # Load metadata if not already loaded
         self._load_metadata()
@@ -103,8 +108,9 @@ class CategorizationEngine:
 
         # Get available options
         available_types = [t.name for t in self._document_types]
-        # Exclude inbox tag from available tags - it's always preserved automatically
-        available_tags = [t.name for t in self._tags if not t.is_inbox_tag]
+        # Exclude protected tags from available tags - they're always preserved automatically
+        protected_tag_ids = self._get_protected_tag_ids()
+        available_tags = [t.name for t in self._tags if t.id not in protected_tag_ids]
         available_correspondents = [c.name for c in self._correspondents]
 
         # Include pending new correspondents from previous documents in this batch
@@ -175,10 +181,11 @@ class CategorizationEngine:
             else []
         )
 
-        # ALWAYS preserve the inbox tag if it's currently on the document
-        inbox_tag_id = self._get_inbox_tag_id()
-        if inbox_tag_id and inbox_tag_id in document.tags and inbox_tag_id not in suggested_tag_ids:
-            suggested_tag_ids.append(inbox_tag_id)
+        # ALWAYS preserve protected tags if they're currently on the document
+        protected_tag_ids = self._get_protected_tag_ids()
+        for protected_tag_id in protected_tag_ids:
+            if protected_tag_id in document.tags and protected_tag_id not in suggested_tag_ids:
+                suggested_tag_ids.append(protected_tag_id)
 
         if correspondent_is_pending:
             # Treat as new even though the agent didn't mark it as NEW

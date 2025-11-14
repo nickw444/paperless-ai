@@ -105,7 +105,7 @@ python main.py analyze --export suggestions.json
 - **Correspondent creation**: Suggests new correspondents when none match, with ML auto-matching enabled
 - **Batch processing**: Process documents incrementally with `--limit`
 - **Incremental workflow**: Already-processed documents are automatically excluded
-- **Inbox preservation**: Keeps inbox tags for manual review workflows
+- **Protected tag preservation**: Keeps configured protected tags (default: Inbox) for manual review workflows
 - **JSON export**: Save suggestions for later review or automation
 
 ## Development

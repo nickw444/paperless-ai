@@ -58,6 +58,10 @@ class Settings(BaseSettings):
         default=0,
         description="Rate limit for document processing (0=no limit, docs/minute)",
     )
+    protected_tags: str = Field(
+        default="Inbox",
+        description="Comma-separated list of tag names that should never be removed from documents",
+    )
 
     @field_validator("paperless_url")
     @classmethod
@@ -73,6 +77,13 @@ class Settings(BaseSettings):
         if normalized not in {"claude", "codex", "opencode"}:
             raise ValueError("AI_AGENT must be either 'claude', 'codex', or 'opencode'")
         return normalized
+
+    @field_validator("protected_tags", mode="after")
+    @classmethod
+    def validate_protected_tags(cls, value: str) -> list[str]:
+        """Parse protected_tags from comma-separated string to list."""
+        # Split comma-separated string and strip whitespace
+        return [tag.strip() for tag in value.split(",") if tag.strip()]
 
     class Config:
         env_file = ".env"
@@ -127,6 +138,10 @@ def load_settings() -> Settings:
         print("  - OPENCODE_TIMEOUT: Timeout in seconds (default: CLAUDE_TIMEOUT)", file=sys.stderr)
         print(
             "  - OPENCODE_MAX_CONTENT_CHARS: Max document chars to analyze (default: CLAUDE limit)",
+            file=sys.stderr,
+        )
+        print(
+            '  - PROTECTED_TAGS: Comma-separated tag names to never remove (default: "Inbox")',
             file=sys.stderr,
         )
         sys.exit(1)
