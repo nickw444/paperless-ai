@@ -99,7 +99,13 @@ def list_inbox(output):
 @click.option("--export", type=click.Path(), help="Export suggestions to file (JSON)")
 @click.option("--apply", is_flag=True, help="Apply changes after review")
 @click.option("--yes", "-y", is_flag=True, help="Automatically apply changes without prompts")
-def analyze(doc_id, output, limit, offset, export, apply, yes):
+@click.option(
+    "--batch-size",
+    type=int,
+    default=10,
+    help="Process documents in batches of this size (only applies when --apply is used)",
+)
+def analyze(doc_id, output, limit, offset, export, apply, yes, batch_size):
     """Analyze inbox documents and suggest categorizations."""
     try:
         agent = create_agent()
@@ -133,74 +139,39 @@ def analyze(doc_id, output, limit, offset, export, apply, yes):
             console.print("[yellow]No documents to analyze[/yellow]")
             return
 
-        # Analyze documents
-        suggestions = []
-        with console.status("[bold green]Analyzing documents...") as status:
-            for i, doc in enumerate(documents, 1):
-                status.update(f"[bold green]Analyzing document {i}/{len(documents)}...")
-                suggestion = engine.categorize_document(doc)
-                suggestions.append(suggestion)
-                _apply_rate_limit()
-
-        # Export if requested
-        if export:
-            with open(export, "w") as f:
-                data = [s.model_dump() for s in suggestions]
-                json.dump(data, f, indent=2, default=str)
-            console.print(f"[green]✓[/green] Exported suggestions to {export}")
-
-        # Display results
-        if output == "json":
-            console.print(json.dumps([s.model_dump() for s in suggestions], indent=2, default=str))
+        # Process documents based on apply mode
+        if apply:
+            # Batch processing mode: analyze, handle new entities, and apply in batches
+            _process_documents_in_batches(engine, documents, output, export, yes, batch_size)
         else:
-            for suggestion in suggestions:
-                _display_suggestion(suggestion)
+            # Display-only mode: analyze all documents first, then display
+            suggestions = []
+            with console.status("[bold green]Analyzing documents...") as status:
+                for i, doc in enumerate(documents, 1):
+                    status.update(f"[bold green]Analyzing document {i}/{len(documents)}...")
+                    suggestion = engine.categorize_document(doc)
+                    suggestions.append(suggestion)
+                    _apply_rate_limit()
 
-        # Show new entities review if any were found (only correspondents now)
-        if engine.new_entities_found and any(engine.new_entities_found.values()):
-            _show_new_entities_review(engine.new_entities_found)
+            # Export if requested
+            if export:
+                with open(export, "w") as f:
+                    data = [s.model_dump() for s in suggestions]
+                    json.dump(data, f, indent=2, default=str)
+                console.print(f"[green]✓[/green] Exported suggestions to {export}")
 
-            if apply:
-                if yes or click.confirm("\nCreate these new correspondents in Paperless?"):
-                    created = _create_new_entities(engine, engine.new_entities_found)
-                    console.print(
-                        f"[green]✓[/green] Created {created['correspondents']} new correspondent(s)"
-                    )
+            # Display results
+            if output == "json":
+                console.print(
+                    json.dumps([s.model_dump() for s in suggestions], indent=2, default=str)
+                )
+            else:
+                for suggestion in suggestions:
+                    _display_suggestion(suggestion)
 
-                    # Re-run categorization ONLY for documents with NEW correspondents
-                    if engine.documents_with_new_entities:
-                        count = len(engine.documents_with_new_entities)
-                        if yes or click.confirm(
-                            f"\nRe-categorize {count} documents that had new correspondents?"
-                        ):
-                            docs_to_reprocess = [
-                                doc
-                                for doc in documents
-                                if doc.id in engine.documents_with_new_entities
-                            ]
-                            new_suggestions = []
-                            with console.status(
-                                "[bold green]Re-categorizing documents..."
-                            ) as status:
-                                for i, doc in enumerate(docs_to_reprocess, 1):
-                                    count_text = f"{i}/{len(docs_to_reprocess)}"
-                                    status.update(
-                                        f"[bold green]Re-categorizing document {count_text}..."
-                                    )
-                                    new_suggestion = engine.categorize_document(doc)
-                                    new_suggestions.append(new_suggestion)
-                                    _apply_rate_limit()
-                            # Replace old suggestions with new ones
-                            for new_sugg in new_suggestions:
-                                for i, old_sugg in enumerate(suggestions):
-                                    if old_sugg.document_id == new_sugg.document_id:
-                                        suggestions[i] = new_sugg
-                                        break
-
-        # Apply changes if requested
-        if apply and suggestions:
-            if yes or click.confirm("\nApply categorization suggestions to documents?"):
-                _apply_suggestions(engine, suggestions)
+            # Show new entities review if any were found (only correspondents now)
+            if engine.new_entities_found and any(engine.new_entities_found.values()):
+                _show_new_entities_review(engine.new_entities_found)
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -265,7 +236,7 @@ def _show_new_entities_review(new_entities):
 
 def _create_new_entities(engine, new_entities):
     """Create new entities in Paperless (only correspondents)."""
-    created = {"correspondents": 0}
+    created = {"correspondents": []}
 
     with console.status("[bold green]Creating new correspondents...") as status:
         # Create correspondents
@@ -273,7 +244,7 @@ def _create_new_entities(engine, new_entities):
             try:
                 status.update(f"[bold green]Creating correspondent: {name}")
                 engine.paperless.create_correspondent(name)
-                created["correspondents"] += 1
+                created["correspondents"].append(name)
             except Exception as e:
                 console.print(f"[red]✗[/red] Failed to create correspondent '{name}': {e}")
 
@@ -282,6 +253,117 @@ def _create_new_entities(engine, new_entities):
     engine._load_metadata()
 
     return created
+
+
+def _process_documents_in_batches(engine, documents, output, export, yes, batch_size):
+    """Process documents in batches: analyze, handle new entities, and apply."""
+    all_suggestions = []
+    total_processed = 0
+    total_batches = (len(documents) + batch_size - 1) // batch_size
+
+    # Process documents in batches
+    for batch_start in range(0, len(documents), batch_size):
+        batch_end = min(batch_start + batch_size, len(documents))
+        batch_documents = documents[batch_start:batch_end]
+        batch_number = (batch_start // batch_size) + 1
+
+        console.print(
+            f"\n[bold]Processing batch {batch_number}/{total_batches} "
+            f"({len(batch_documents)} documents)[/bold]"
+        )
+
+        # Reset new entities tracking for this batch
+        engine.new_entities_found = {"correspondents": {}}
+        engine.documents_with_new_entities = set()
+
+        # Analyze documents in this batch
+        batch_suggestions = []
+        with console.status(f"[bold green]Analyzing batch {batch_number}...") as status:
+            for i, doc in enumerate(batch_documents, 1):
+                doc_number = batch_start + i
+                status.update(
+                    f"[bold green]Analyzing document {doc_number}/{len(documents)} "
+                    f"(batch {batch_number}/{total_batches})..."
+                )
+                suggestion = engine.categorize_document(doc)
+                batch_suggestions.append(suggestion)
+                _apply_rate_limit()
+
+        # Display results for this batch
+        if output == "json":
+            console.print(
+                json.dumps([s.model_dump() for s in batch_suggestions], indent=2, default=str)
+            )
+        else:
+            for suggestion in batch_suggestions:
+                _display_suggestion(suggestion)
+
+        # Handle new entities for this batch
+        if engine.new_entities_found and any(engine.new_entities_found.values()):
+            _show_new_entities_review(engine.new_entities_found)
+
+            if yes or click.confirm(f"\nCreate new correspondents for batch {batch_number}?"):
+                created = _create_new_entities(engine, engine.new_entities_found)
+                console.print(
+                    f"[green]✓[/green] Created {len(created['correspondents'])} new "
+                    f"correspondent(s) for batch {batch_number}"
+                )
+
+                # Clear the created correspondents from new_entities_found so they're no longer
+                # treated as pending during re-categorization
+                for name in created["correspondents"]:
+                    if name in engine.new_entities_found["correspondents"]:
+                        del engine.new_entities_found["correspondents"][name]
+
+                # Re-run categorization for documents with NEW correspondents in this batch
+                if engine.documents_with_new_entities:
+                    docs_to_reprocess = [
+                        doc
+                        for doc in batch_documents
+                        if doc.id in engine.documents_with_new_entities
+                    ]
+                    if docs_to_reprocess:
+                        new_suggestions = []
+                        with console.status(
+                            f"[bold green]Re-categorizing documents in batch {batch_number}..."
+                        ) as status:
+                            for i, doc in enumerate(docs_to_reprocess, 1):
+                                status_text = (
+                                    f"[bold green]Re-categorizing document "
+                                    f"{i}/{len(docs_to_reprocess)} in batch {batch_number}..."
+                                )
+                                status.update(status_text)
+                                new_suggestion = engine.categorize_document(doc)
+                                new_suggestions.append(new_suggestion)
+                                _apply_rate_limit()
+                        # Replace old suggestions with new ones
+                        for new_sugg in new_suggestions:
+                            for i, old_sugg in enumerate(batch_suggestions):
+                                if old_sugg.document_id == new_sugg.document_id:
+                                    batch_suggestions[i] = new_sugg
+                                    break
+
+        # Apply suggestions for this batch
+        if batch_suggestions:
+            if yes or click.confirm(
+                f"\nApply categorization suggestions for batch {batch_number}?"
+            ):
+                _apply_suggestions(engine, batch_suggestions)
+
+        # Add batch suggestions to all suggestions for export
+        all_suggestions.extend(batch_suggestions)
+        total_processed += len(batch_documents)
+
+    # Export all suggestions if requested
+    if export and all_suggestions:
+        with open(export, "w") as f:
+            data = [s.model_dump() for s in all_suggestions]
+            json.dump(data, f, indent=2, default=str)
+        console.print(f"[green]✓[/green] Exported all suggestions to {export}")
+
+    console.print(
+        f"\n[green]✓[/green] Processed {total_processed} document(s) in {total_batches} batch(es)"
+    )
 
 
 def _display_suggestion(suggestion):
