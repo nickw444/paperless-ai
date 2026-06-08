@@ -80,6 +80,20 @@ class CategorizationEngine:
             They will not be passed to the agent and will be automatically included
             in suggested_tag_ids, allowing manual review workflows.
         """
+        # Empty-content documents cannot be categorized. Return before loading Paperless
+        # metadata so repeated no-OCR documents fail quickly and remain unmarked.
+        if not document.content or not document.content.strip():
+            return CategorizationSuggestion(
+                document_id=document.id,
+                current_title=document.title,
+                current_type=document.document_type,
+                current_tags=document.tags,
+                current_correspondent=document.correspondent,
+                current_storage_path=document.storage_path,
+                status="error",
+                error_message="Document has no OCR content",
+            )
+
         # Load metadata if not already loaded
         self._load_metadata()
 
@@ -88,23 +102,6 @@ class CategorizationEngine:
         current_tag_names = self._get_tag_names(document.tags)
         current_correspondent_name = self._get_correspondent_name(document.correspondent)
         current_storage_path_name = self._get_storage_path_name(document.storage_path)
-
-        # Skip if document has no content
-        if not document.content or not document.content.strip():
-            return CategorizationSuggestion(
-                document_id=document.id,
-                current_title=document.title,
-                current_type=document.document_type,
-                current_type_name=current_type_name,
-                current_tags=document.tags,
-                current_tag_names=current_tag_names,
-                current_correspondent=document.correspondent,
-                current_correspondent_name=current_correspondent_name,
-                current_storage_path=document.storage_path,
-                current_storage_path_name=current_storage_path_name,
-                status="error",
-                error_message="Document has no OCR content",
-            )
 
         # Get available options
         available_types = [t.name for t in self._document_types]

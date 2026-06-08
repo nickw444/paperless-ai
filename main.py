@@ -183,20 +183,23 @@ def analyze(doc_id, output, limit, offset, export, apply, yes, batch_size):
 
 def _apply_suggestions(engine, suggestions):
     """Apply categorization suggestions to documents."""
+    successful_suggestions = [s for s in suggestions if s.status == "success"]
+    skipped_count = len(suggestions) - len(successful_suggestions)
+
+    if not successful_suggestions:
+        console.print("\n[green]✓[/green] Applied changes to 0 document(s)")
+        if skipped_count > 0:
+            console.print(f"[yellow]⚠️[/yellow] Skipped {skipped_count} document(s)")
+        return
+
     # Get or create the paperless-ai-parsed tag
     parsed_tag_id = engine.get_or_create_parsed_tag()
 
     applied_count = 0
-    skipped_count = 0
 
     with console.status("[bold green]Applying suggestions...") as status:
-        for i, suggestion in enumerate(suggestions, 1):
-            status.update(f"[bold green]Updating document {i}/{len(suggestions)}...")
-
-            # Skip if there was an error
-            if suggestion.status != "success":
-                skipped_count += 1
-                continue
+        for i, suggestion in enumerate(successful_suggestions, 1):
+            status.update(f"[bold green]Updating document {i}/{len(successful_suggestions)}...")
 
             # Build tags list: include parsed tag + suggested tags
             tags = list(suggestion.suggested_tag_ids) if suggestion.suggested_tag_ids else []
