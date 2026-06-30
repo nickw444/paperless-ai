@@ -5,7 +5,7 @@ from __future__ import annotations
 from rich.console import Console
 
 from llm.schemas import AgentDebugTrace
-from llm.usage import AgentUsageMetadata, extract_agent_usage
+from llm.usage import AgentUsageMetadata, extract_usage
 
 
 def print_agent_debug_traces(
@@ -27,18 +27,14 @@ def print_agent_debug_traces(
         if trace.error:
             console.print(f"[red]Error:[/red] {trace.error}")
 
-        usage = trace.usage_metadata or extract_agent_usage(
-            stdout=trace.stdout,
-            stderr=trace.stderr,
-            command=trace.command,
-        )
+        usage = trace.usage_metadata or extract_usage(trace.stderr, trace.command)
         if usage and usage.has_displayable_fields():
             console.print("\n[dim]--- metadata ---[/dim]")
             for line in format_usage_metadata(usage):
                 console.print(line)
 
         console.print("\n[dim]--- prompt ---[/dim]")
-        console.print(trace.resolved_prompt or trace.prompt)
+        console.print(trace.prompt)
 
         raw_output = _raw_agent_response(trace)
         if raw_output:

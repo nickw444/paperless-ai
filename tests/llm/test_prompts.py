@@ -2,9 +2,7 @@
 
 from llm.prompts import (
     build_categorization_prompt,
-    build_categorization_prompt_with_files,
     format_current_metadata_json,
-    materialize_prompt_for_debug,
 )
 from llm.schemas import AvailableOptions, CurrentMetadata, EntityOption
 
@@ -38,46 +36,6 @@ def test_build_categorization_prompt_puts_instructions_before_data():
     assert '"document_types":[{"id":1,"name":"Bill"}]' in prompt
     assert '"title":"scan.pdf"' in prompt
     assert '"tags":[{"id":1,"name":"Inbox"}]' in prompt
-
-
-def test_build_categorization_prompt_with_files_puts_instructions_before_refs():
-    prompt = build_categorization_prompt_with_files(
-        ocr_path="/tmp/ocr.txt",
-        options_path="/tmp/options.json",
-        current_metadata=_sample_current_metadata(),
-    )
-
-    instructions_index = prompt.index("SEMANTIC TAG MATCHING:")
-    metadata_index = prompt.index("<current_metadata>")
-    ocr_ref_index = prompt.index("@/tmp/ocr.txt")
-    options_ref_index = prompt.index("@/tmp/options.json")
-
-    assert instructions_index < metadata_index < ocr_ref_index < options_ref_index
-    assert '"title":"scan.pdf"' in prompt
-
-
-def test_materialize_prompt_for_debug_inlines_file_backed_prompt():
-    file_prompt = build_categorization_prompt_with_files(
-        ocr_path="/tmp/ocr.txt",
-        options_path="/tmp/options.json",
-        current_metadata=_sample_current_metadata(),
-    )
-    options = AvailableOptions(
-        document_types=[EntityOption(id=1, name="Bill")],
-    )
-
-    resolved = materialize_prompt_for_debug(
-        file_prompt,
-        content="Invoice total $42",
-        available_options=options,
-        current_metadata=_sample_current_metadata(),
-    )
-
-    assert resolved is not None
-    assert "@/tmp/ocr.txt" not in resolved
-    assert "Invoice total $42" in resolved
-    assert '"document_types":[{"id":1,"name":"Bill"}]' in resolved
-    assert '"title":"scan.pdf"' in resolved
 
 
 def test_format_current_metadata_json_is_compact():

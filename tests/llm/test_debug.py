@@ -93,23 +93,3 @@ def test_format_usage_metadata_includes_cost_and_token_breakdown():
     assert "tokens: 1,250 (input: 1,000, output: 250)" in lines
     assert "cost: $0.0042" in lines
     assert "duration: 900 ms" in lines
-
-
-def test_print_agent_debug_traces_prefers_resolved_prompt():
-    output = StringIO()
-    console = Console(file=output, width=120)
-    trace = AgentDebugTrace(
-        attempt=1,
-        prompt="The OCR content is in: @/tmp/ocr.txt",
-        resolved_prompt="inline OCR content here",
-        prepared_content_chars=1,
-        ocr_preview="x",
-        available_options=AvailableOptions(),
-        json_schema={},
-    )
-
-    print_agent_debug_traces(console, [trace])
-
-    rendered = output.getvalue()
-    assert "inline OCR content here" in rendered
-    assert "@/tmp/ocr.txt" not in rendered

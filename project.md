@@ -1,10 +1,10 @@
 # Paperless-AI: Automated Document Categorization Tool
 
-A command line tool to categorize Paperless-ngx documents in the inbox queue using Claude.
+A command line tool to categorize Paperless-ngx documents in the inbox queue using the Codex CLI.
 
 ## Overview
 
-This tool automates the naming and tagging of documents in Paperless-ngx by analyzing their OCR content with Claude. Currently uses Claude via CLI (`claude -p "<query>"`) as a workaround until API access is available.
+This tool automates the naming and tagging of documents in Paperless-ngx by analyzing their OCR content with the OpenAI Codex CLI (`codex exec`).
 
 **IMPORTANT**: Phase 1 is READ-ONLY. The tool will analyze documents and suggest categorizations but will NOT make any changes to Paperless. This allows for safe testing and verification before enabling write mode in Phase 2.
 
@@ -33,12 +33,13 @@ paperless-ai/
 │   ├── __init__.py
 │   ├── client.py          # API client
 │   └── models.py          # Data models
-├── llm/                    # AI agent implementations
+├── llm/                    # Codex CLI agent
 │   ├── __init__.py
-│   ├── base.py
-│   ├── factory.py
-│   ├── claude.py        # Claude CLI wrapper
-│   └── codex.py         # Codex CLI wrapper
+│   ├── codex.py          # CodexAgent implementation
+│   ├── prompts.py        # Prompt templates
+│   ├── schemas.py        # Models and validation
+│   ├── usage.py          # Token/cost metadata parsing
+│   └── debug.py          # Debug console output
 ├── categorizer/           # Core categorization logic
 │   ├── __init__.py
 │   └── engine.py         # Orchestrates the categorization process
@@ -61,12 +62,11 @@ paperless-ai/
   - [ ] Storage paths
 - [ ] ~~Update document metadata~~ (DISABLED in Phase 1 - read-only mode)
 
-### 2. LLM CLI Wrappers (`llm/claude.py`, `llm/codex.py`)
-- [ ] Create temporary file in /tmp for OCR content (avoid command line length limits)
-- [ ] Build prompt that references the temp file path
-- [ ] Execute configured agent via subprocess (Claude: `claude -p "prompt with @/tmp/filename"`, Codex via stdin)
+### 2. Codex CLI Agent (`llm/codex.py`)
+- [ ] Build prompt with inline OCR content and available options
+- [ ] Execute Codex via subprocess (`codex exec` with stdin prompt)
 - [ ] Validate JSON agent response against schema
-- [ ] Clean up temp file after processing (use context manager)
+- [ ] Clean up temp files after processing
 - [ ] Handle errors and timeouts
 - [ ] Implement retry logic
 
@@ -75,8 +75,8 @@ paperless-ai/
   - Document OCR content
   - Available tags, types, correspondents
   - Instructions for categorization
-- [ ] Parse Claude's categorization response
-- [ ] Map Claude's suggestions to Paperless entities
+- [ ] Parse Codex categorization response
+- [ ] Map agent suggestions to Paperless entities
 - [ ] Display suggested changes (read-only mode)
 - [ ] ~~Apply changes to document via API~~ (DISABLED in Phase 1)
 
@@ -100,9 +100,12 @@ Use python-dotenv to load environment variables from `.env` file:
 PAPERLESS_URL=https://your-paperless-instance.com
 PAPERLESS_API_TOKEN=your-api-token-here
 
-# Claude CLI configuration
-CLAUDE_COMMAND=claude  # Path to Claude CLI if not in PATH
-CLAUDE_TIMEOUT=30  # Timeout in seconds for Claude responses
+# Codex CLI configuration
+CODEX_COMMAND=codex  # Path to Codex CLI if not in PATH
+CODEX_MODEL=gpt-5
+CODEX_TIMEOUT=120
+CODEX_MAX_CONTENT_CHARS=2000
+CODEX_REASONING_EFFORT=minimal
 ```
 
 The application should:
@@ -111,38 +114,23 @@ The application should:
 3. Validate required variables on startup
 4. Provide clear error messages for missing configuration
 
-## Claude Prompt Template
+## Codex Prompt Template
 
-The tool will create a temporary file with OCR content and use Claude's file reading capability:
+The tool embeds OCR content and available options directly in the prompt sent to Codex via stdin:
 
 ```bash
-# Save OCR content to temp file
-echo "$ocr_content" > /tmp/paperless_doc_123.txt
+codex exec --model gpt-5 --output-schema /tmp/schema.json -o /tmp/output.json - <<'EOF'
+You are helping categorize a document in Paperless-ngx.
 
-# Call Claude with prompt referencing the file
-claude -p "You are helping categorize a document in Paperless-ngx.
-
-The OCR content of the document is in the file: @/tmp/paperless_doc_123.txt
-
-Based on this content, suggest:
-1. An appropriate title (concise, descriptive)
-2. Document type from the available options
-3. Relevant tags from the available options
-4. Correspondent if identifiable
-
-Available document types: {types}
-Available tags: {tags}
-Available correspondents: {correspondents}
-
-The agent response is validated against a JSON schema (title, document_type, tags, correspondent, storage_path).
-
-# Clean up temp file
-rm /tmp/paperless_doc_123.txt
+<current_metadata>...</current_metadata>
+<ocr_content>...</ocr_content>
+<available_options>...</available_options>
+EOF
 ```
 
 Implementation notes:
-- Use Python's `tempfile.NamedTemporaryFile` for secure temp file creation
-- Ensure proper cleanup even on errors (use try/finally or context manager)
+- Use Python's `tempfile.NamedTemporaryFile` for schema and output files only
+- Ensure proper cleanup even on errors (use try/finally)
 - Generate unique filenames to avoid conflicts with parallel processing
 
 ## Output Format (Read-Only Mode)
@@ -164,7 +152,7 @@ Status: ✓ Analyzed successfully
 ## Error Handling
 
 - Network failures: Retry with exponential backoff
-- Invalid Claude responses: Log and skip document
+- Invalid Codex responses: Log and skip document
 - Missing OCR content: Skip document with warning
 - API authentication failures: Exit with clear error message
 - Connection timeouts: Configurable timeout with retry
@@ -173,12 +161,12 @@ Status: ✓ Analyzed successfully
 
 1. Unit tests for each module
 2. Mock Paperless API responses
-3. Mock Claude CLI responses
+3. Mock Codex CLI responses
 4. Integration test with test Paperless instance
 
 ## Future Enhancements (Not in Phase 1)
 
-- Claude API integration when available
+- Direct OpenAI API integration when needed
 - Batch processing with progress bar
 - Learning from user corrections
 - Custom categorization rules
@@ -190,7 +178,7 @@ Status: ✓ Analyzed successfully
 - Successfully connects to remote Paperless-ngx API using token authentication
 - Retrieves and lists all inbox documents
 - Fetches OCR content for each document
-- Generates appropriate categorization suggestions via Claude CLI
+- Generates appropriate categorization suggestions via Codex CLI
 - Displays suggestions clearly without modifying documents
 - Handles errors gracefully with informative messages
 - Exports suggestions to file for review
@@ -223,7 +211,7 @@ Once the read-only mode is verified to work correctly:
 - Never commit `.env` file (add to .gitignore)
 - API token should have appropriate permissions in Paperless
 - Use HTTPS for remote connections
-- Consider rate limiting to avoid overwhelming Claude CLI
+- Consider rate limiting to avoid overwhelming the Codex CLI
 
 ## Paperless-ngx REST API Reference
 

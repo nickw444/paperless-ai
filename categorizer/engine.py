@@ -1,10 +1,10 @@
 """Categorization engine that orchestrates document analysis."""
 
-from llm.base import CommandLineAgent
 from llm.schemas import (
     AgentCategorizationResult,
     AvailableOptions,
     CurrentMetadata,
+    DocumentCategorizer,
     EntityOption,
     is_pending_correspondent_id,
     merge_correspondent_options,
@@ -24,7 +24,7 @@ from paperless.models import (
 class CategorizationEngine:
     """Engine for categorizing documents using LLM agents and Paperless metadata."""
 
-    def __init__(self, agent: CommandLineAgent):
+    def __init__(self, agent: DocumentCategorizer):
         """Initialize the categorization engine."""
         self.paperless = PaperlessClient()
         self.agent = agent

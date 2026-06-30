@@ -1,29 +1,29 @@
 # paperless-ai
 
-Automated document categorization for Paperless-ngx using CLI-based AI agents (Claude Code by default, with optional Codex support).
+Automated document categorization for Paperless-ngx using the OpenAI Codex CLI.
 
 ## What it does
 
-paperless-ai analyzes documents in your Paperless-ngx inbox and suggests appropriate metadata (titles, tags, correspondents, document types, and storage paths). It integrates with CLI tooling to read OCR content and make intelligent categorization decisions based on your existing Paperless setup. Claude Code remains the default integration, and the Codex CLI can be enabled when preferred.
+paperless-ai analyzes documents in your Paperless-ngx inbox and suggests appropriate metadata (titles, tags, correspondents, document types, and storage paths). It uses the Codex CLI to read OCR content and make intelligent categorization decisions based on your existing Paperless setup.
 
-By using a CLI agent instead of a direct API, you can process documents using the subscriptions you already have (for example Claude Pro) without paying per-token API costs. This makes it economical to categorize large batches of documents.
+By using the Codex CLI instead of a direct API, you can process documents using the subscriptions you already have (for example ChatGPT Plus) without paying per-token API costs. This makes it economical to categorize large batches of documents.
 
 ## Purpose
 
 Manually categorizing documents in Paperless-ngx is time-consuming. This tool automates the process by:
 
-- Analyzing document content using the configured agent (Claude by default)
+- Analyzing document content using the Codex CLI
 - Suggesting metadata based on your existing tags, correspondents, types, and storage paths
 - Learning your organizational patterns by matching against existing entities
 - Creating new correspondents when needed (with ML matching enabled)
 - Allowing review before applying changes
-- Avoiding API token costs by leveraging CLI agents instead of direct APIs
+- Avoiding API token costs by leveraging the Codex CLI instead of direct APIs
 
 ## How it works
 
 1. **Fetch documents**: Retrieves uncategorized documents from your Paperless-ngx inbox
-2. **Analyze content**: Sends OCR text to the configured agent along with your available metadata options
-3. **Generate suggestions**: The agent returns JSON validated against a schema, preferring existing entities
+2. **Analyze content**: Sends OCR text to Codex along with your available metadata options
+3. **Generate suggestions**: Codex returns JSON validated against a schema, preferring existing entities
 4. **Review**: Displays suggestions in a formatted table for your review
 5. **Apply changes**: Optionally updates documents in Paperless-ngx and tags them as processed
 
@@ -45,29 +45,17 @@ Create a `.env` file or set environment variables:
 PAPERLESS_URL=http://your-paperless-instance
 PAPERLESS_API_TOKEN=your-api-token
 
-# Agent selection (default: claude)
-AI_AGENT=claude        # or codex (required when using Codex CLI)
-
-# Claude configuration
-CLAUDE_COMMAND=claude  # Path to Claude CLI
-CLAUDE_MODEL=sonnet    # Optional override
-CLAUDE_TIMEOUT=120     # Timeout in seconds
-
-# Codex configuration (used when AI_AGENT=codex)
+# Codex configuration
 CODEX_COMMAND=codex
 CODEX_MODEL=gpt-5          # Optional, defaults to gpt-5
 CODEX_TIMEOUT=120
+CODEX_MAX_CONTENT_CHARS=2000
 CODEX_REASONING_EFFORT=minimal
 ```
 
-Both agents share the same `CLAUDE_MAX_CONTENT_CHARS` setting by default; set `CODEX_MAX_CONTENT_CHARS` if you need a different limit when using Codex.
-
 ### CLI version requirements
 
-Agent responses are JSON-only, enforced by schema at invocation time:
-
-- **Claude**: Claude Code CLI with `--output-format json` and `--json-schema` support
-- **Codex**: Codex CLI with `exec --output-schema` support
+Codex responses are JSON-only, enforced by schema at invocation time. Requires Codex CLI with `exec --output-schema` support.
 
 ## Usage
 
@@ -113,7 +101,7 @@ python main.py analyze --export suggestions.json
 
 ## Features
 
-- **Intelligent matching**: The LLM agent tries to match existing entities before suggesting new ones
+- **Intelligent matching**: Codex tries to match existing entities before suggesting new ones
 - **Correspondent creation**: Suggests new correspondents when none match, with ML auto-matching enabled
 - **Batch processing**: Process documents incrementally with `--limit`
 - **Incremental workflow**: Already-processed documents are automatically excluded

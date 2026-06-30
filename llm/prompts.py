@@ -1,4 +1,4 @@
-"""Shared prompt templates for document categorization agents."""
+"""Shared prompt templates for document categorization."""
 
 import json
 
@@ -103,38 +103,3 @@ def build_categorization_prompt(
             current_metadata=current_metadata,
         )
     }"""
-
-
-def build_categorization_prompt_with_files(
-    *,
-    ocr_path: str,
-    options_path: str,
-    current_metadata: CurrentMetadata,
-) -> str:
-    """Build a categorization prompt with file references after the instructions."""
-    metadata_json = format_current_metadata_json(current_metadata)
-    return f"""{build_categorization_preamble()}
-
-<current_metadata>
-{metadata_json}
-</current_metadata>
-
-The OCR content is in: @{ocr_path}
-The available Paperless metadata options are in: @{options_path}"""
-
-
-def materialize_prompt_for_debug(
-    prompt: str,
-    *,
-    content: str,
-    available_options: AvailableOptions,
-    current_metadata: CurrentMetadata,
-) -> str | None:
-    """Inline file-backed prompt contents for debug display."""
-    if ": @" not in prompt:
-        return None
-    return build_categorization_prompt(
-        content=content,
-        available_options=available_options,
-        current_metadata=current_metadata,
-    )

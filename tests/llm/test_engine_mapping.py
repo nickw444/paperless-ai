@@ -3,7 +3,6 @@
 from datetime import datetime
 
 from categorizer.engine import CategorizationEngine
-from llm.base import CommandLineAgent
 from llm.schemas import (
     AgentCategorizationResult,
     AvailableOptions,
@@ -14,11 +13,10 @@ from llm.schemas import (
 from paperless.models import Document, DocumentType, Tag
 
 
-class StubAgent(CommandLineAgent):
+class StubAgent:
     """Minimal agent stub for engine integration tests."""
 
     def __init__(self, result: AgentCategorizationResult):
-        super().__init__(timeout=1, max_content_chars=1000, max_retries=1)
         self._result = result
 
     def categorize_document(
@@ -29,15 +27,6 @@ class StubAgent(CommandLineAgent):
     ) -> AgentCategorizationResult:
         del ocr_content, available_options, current_metadata
         return self._result
-
-    def _extract_structured_payload(self, stdout: str, output_path: str | None) -> dict:
-        raise NotImplementedError
-
-    def _build_prompt(self, **kwargs) -> str:
-        raise NotImplementedError
-
-    def _build_subprocess_args(self, **kwargs):
-        raise NotImplementedError
 
 
 class StubPaperless:

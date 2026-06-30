@@ -1,7 +1,7 @@
 [project]
 name = "paperless-ai"
 version = "0.1.0"
-description = "Automated document categorization tool for Paperless-ngx using Claude AI"
+description = "Automated document categorization tool for Paperless-ngx using the Codex CLI"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

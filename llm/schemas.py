@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -128,7 +128,6 @@ class AgentDebugTrace(BaseModel):
     parsed_payload: dict[str, Any] | None = None
     validated_output: CategorizationAgentOutput | None = None
     usage_metadata: AgentUsageMetadata | None = None
-    resolved_prompt: str | None = None
     error: str | None = None
 
 
@@ -139,6 +138,17 @@ class AgentCategorizationResult(BaseModel):
     raw_response: str = ""
     error: str | None = None
     debug_traces: list[AgentDebugTrace] = Field(default_factory=list)
+
+
+class DocumentCategorizer(Protocol):
+    """Protocol for agents that categorize documents via LLM."""
+
+    def categorize_document(
+        self,
+        ocr_content: str,
+        available_options: AvailableOptions,
+        current_metadata: CurrentMetadata,
+    ) -> AgentCategorizationResult: ...
 
 
 def build_categorization_json_schema() -> dict[str, Any]:
