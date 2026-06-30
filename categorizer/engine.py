@@ -1,6 +1,14 @@
 """Categorization engine that orchestrates document analysis."""
 
-from llm.base import AgentResponse, CommandLineAgent
+from llm.base import CommandLineAgent
+from llm.schemas import (
+    AgentCategorizationResult,
+    AvailableOptions,
+    EntityOption,
+    is_pending_correspondent_id,
+    merge_correspondent_options,
+    pending_correspondent_name,
+)
 from paperless.client import PaperlessClient
 from paperless.models import (
     CategorizationSuggestion,
@@ -27,7 +35,7 @@ class CategorizationEngine:
             "correspondents": {},  # name -> list of doc_ids
         }
         self.documents_with_new_entities: set[int] = set()  # Track which docs need re-processing
-        self.last_agent_response: AgentResponse | None = None
+        self.last_agent_result: AgentCategorizationResult | None = None
 
     def _load_metadata(self):
         """Load and cache all metadata from Paperless."""
@@ -102,31 +110,22 @@ class CategorizationEngine:
                 error_message="Document has no OCR content",
             )
 
-        # Get available options
-        available_types = [t.name for t in self._document_types]
-        # Exclude inbox tag from available tags - it's always preserved automatically
-        available_tags = [t.name for t in self._tags if not t.is_inbox_tag]
-        available_correspondents = [c.name for c in self._correspondents]
-
-        # Include pending new correspondents from previous documents in this batch
-        # This prevents duplicate "NEW: Foo" suggestions for the same correspondent
         pending_new_correspondents = list(self.new_entities_found["correspondents"].keys())
-        available_correspondents.extend(pending_new_correspondents)
 
-        available_storage_paths = [sp.name for sp in self._storage_paths]
-
-        # Call the configured agent for categorization
-        agent_response = self.agent.categorize_document(
-            document.content,
-            available_types,
-            available_tags,
-            available_correspondents,
-            available_storage_paths,
+        available_options = AvailableOptions(
+            document_types=[EntityOption(id=t.id, name=t.name) for t in self._document_types],
+            tags=[EntityOption(id=t.id, name=t.name) for t in self._tags if not t.is_inbox_tag],
+            correspondents=merge_correspondent_options(
+                [EntityOption(id=c.id, name=c.name) for c in self._correspondents],
+                pending_new_correspondents,
+            ),
+            storage_paths=[EntityOption(id=sp.id, name=sp.name) for sp in self._storage_paths],
         )
-        self.last_agent_response = agent_response
 
-        # Handle agent errors
-        if agent_response.error:
+        result = self.agent.categorize_document(document.content, available_options)
+        self.last_agent_result = result
+
+        if result.error or result.output is None:
             return CategorizationSuggestion(
                 document_id=document.id,
                 current_title=document.title,
@@ -139,95 +138,126 @@ class CategorizationEngine:
                 current_storage_path=document.storage_path,
                 current_storage_path_name=current_storage_path_name,
                 status="error",
-                error_message=agent_response.error,
+                error_message=result.error or "Agent returned no output",
             )
 
-        # Check if correspondent is pending from a previous document in this batch
-        correspondent_is_pending = (
-            agent_response.correspondent in pending_new_correspondents
-            if agent_response.correspondent
-            else False
-        )
+        output = result.output
 
-        # Track new entities (only correspondents)
-        # Includes ones the agent marked as NEW and ones that matched pending
-        # correspondents from previous documents in this batch
-        if agent_response.correspondent_is_new and agent_response.correspondent:
-            self.new_entities_found["correspondents"].setdefault(
-                agent_response.correspondent, []
-            ).append(document.id)
-            self.documents_with_new_entities.add(document.id)
-        elif correspondent_is_pending and agent_response.correspondent:
-            # The agent matched a pending correspondent from a previous doc in this batch
-            self.new_entities_found["correspondents"][agent_response.correspondent].append(
+        new_correspondent_name = output.new_correspondent_name
+
+        if new_correspondent_name and not output.correspondent_id:
+            self.new_entities_found["correspondents"].setdefault(new_correspondent_name, []).append(
                 document.id
             )
             self.documents_with_new_entities.add(document.id)
 
-        # Map the agent's suggestions to Paperless IDs
-        # Only existing entities will have IDs; new entities will be None
-        suggested_type_id = (
-            self._find_type_id(agent_response.document_type)
-            if not agent_response.document_type_is_new
-            else None
-        )
-        suggested_tag_ids = (
-            self._find_tag_ids(agent_response.tags_existing or [])
-            if agent_response.tags_existing
-            else []
-        )
+        suggested_type_id = output.document_type_id
+        suggested_type_name = self._get_type_name(suggested_type_id)
+        suggested_tag_ids = list(output.tag_ids)
 
-        # ALWAYS preserve the inbox tag if it's currently on the document
         inbox_tag_id = self._get_inbox_tag_id()
         if inbox_tag_id and inbox_tag_id in document.tags and inbox_tag_id not in suggested_tag_ids:
             suggested_tag_ids.append(inbox_tag_id)
 
-        if correspondent_is_pending:
-            # Treat as new even though the agent didn't mark it as NEW
-            # (because we added it to available list from previous docs in batch)
+        if output.correspondent_id is not None:
+            if is_pending_correspondent_id(output.correspondent_id):
+                pending_name = pending_correspondent_name(
+                    output.correspondent_id,
+                    pending_new_correspondents,
+                )
+                suggested_correspondent_id = output.correspondent_id
+                suggested_correspondent_name = pending_name
+                suggested_correspondent_is_new = True
+            else:
+                suggested_correspondent_id = output.correspondent_id
+                suggested_correspondent_name = self._get_correspondent_name(
+                    suggested_correspondent_id
+                )
+                suggested_correspondent_is_new = False
+        elif new_correspondent_name:
             suggested_correspondent_id = None
+            suggested_correspondent_name = new_correspondent_name
             suggested_correspondent_is_new = True
         else:
-            suggested_correspondent_id = (
-                self._find_correspondent_id(agent_response.correspondent)
-                if not agent_response.correspondent_is_new
-                else None
-            )
-            suggested_correspondent_is_new = agent_response.correspondent_is_new
+            suggested_correspondent_id = None
+            suggested_correspondent_name = None
+            suggested_correspondent_is_new = False
 
-        suggested_storage_path_id = (
-            self._find_storage_path_id(agent_response.storage_path)
-            if not agent_response.storage_path_is_new
-            else None
-        )
+        suggested_storage_path_id = output.storage_path_id
+        suggested_storage_path_name = self._get_storage_path_name(suggested_storage_path_id)
+
+        suggested_tags = self._get_tag_names(suggested_tag_ids)
 
         return CategorizationSuggestion(
             document_id=document.id,
             current_title=document.title,
-            suggested_title=agent_response.title,
+            suggested_title=output.title,
             current_type=document.document_type,
             current_type_name=current_type_name,
-            suggested_type=agent_response.document_type,
+            suggested_type=suggested_type_name,
             suggested_type_id=suggested_type_id,
-            suggested_type_is_new=agent_response.document_type_is_new,
+            suggested_type_is_new=False,
             current_tags=document.tags,
             current_tag_names=current_tag_names,
-            suggested_tags=agent_response.tags or [],
-            suggested_tags_existing=agent_response.tags_existing or [],
-            suggested_tags_new=agent_response.tags_new or [],
+            suggested_tags=suggested_tags,
+            suggested_tags_existing=suggested_tags,
+            suggested_tags_new=[],
             suggested_tag_ids=suggested_tag_ids,
             current_correspondent=document.correspondent,
             current_correspondent_name=current_correspondent_name,
-            suggested_correspondent=agent_response.correspondent,
+            suggested_correspondent=suggested_correspondent_name,
             suggested_correspondent_id=suggested_correspondent_id,
             suggested_correspondent_is_new=suggested_correspondent_is_new,
             current_storage_path=document.storage_path,
             current_storage_path_name=current_storage_path_name,
-            suggested_storage_path=agent_response.storage_path,
+            suggested_storage_path=suggested_storage_path_name,
             suggested_storage_path_id=suggested_storage_path_id,
-            suggested_storage_path_is_new=agent_response.storage_path_is_new,
+            suggested_storage_path_is_new=False,
             status="success",
         )
+
+    def find_correspondent_id_by_name(self, name: str) -> int | None:
+        """Look up a Paperless correspondent id by name (case-insensitive)."""
+        self._load_metadata()
+        name_lower = name.lower()
+        for correspondent in self._correspondents:
+            if correspondent.name.lower() == name_lower:
+                return correspondent.id
+        return None
+
+    def resolve_suggestion_correspondent_id(self, suggestion) -> int | None:
+        """Resolve a suggestion's correspondent to a real Paperless id for applying."""
+        correspondent_id = suggestion.suggested_correspondent_id
+        if correspondent_id is not None and is_pending_correspondent_id(correspondent_id):
+            if suggestion.suggested_correspondent:
+                resolved = self.find_correspondent_id_by_name(suggestion.suggested_correspondent)
+                if resolved is not None:
+                    return resolved
+
+            pending_names = list(self.new_entities_found["correspondents"].keys())
+            name = pending_correspondent_name(correspondent_id, pending_names)
+            return self.find_correspondent_id_by_name(name) if name else None
+
+        if correspondent_id is not None:
+            return correspondent_id
+
+        if suggestion.suggested_correspondent_is_new and suggestion.suggested_correspondent:
+            return self.find_correspondent_id_by_name(suggestion.suggested_correspondent)
+
+        return None
+
+    def remove_pending_correspondents(self, names: list[str]) -> None:
+        """Remove batch-local pending correspondents after they exist in Paperless."""
+        for name in names:
+            self.new_entities_found["correspondents"].pop(name, None)
+
+    def has_unresolved_new_correspondent(self, suggestion) -> bool:
+        """Return True when a suggestion references a new correspondent not yet in Paperless."""
+        if suggestion.status != "success":
+            return False
+        if not suggestion.suggested_correspondent_is_new:
+            return False
+        return self.resolve_suggestion_correspondent_id(suggestion) is None
 
     def _get_type_name(self, type_id: int | None) -> str | None:
         """Get document type name from ID."""
@@ -257,37 +287,6 @@ class CategorizationEngine:
                 return corr.name
         return None
 
-    def _find_type_id(self, type_name: str | None) -> int | None:
-        """Find document type ID by name (case-insensitive)."""
-        if not type_name:
-            return None
-        type_name_lower = type_name.lower()
-        for dt in self._document_types:
-            if dt.name.lower() == type_name_lower:
-                return dt.id
-        return None
-
-    def _find_tag_ids(self, tag_names: list[str]) -> list[int]:
-        """Find tag IDs by names (case-insensitive)."""
-        tag_ids = []
-        for tag_name in tag_names:
-            tag_name_lower = tag_name.lower()
-            for tag in self._tags:
-                if tag.name.lower() == tag_name_lower:
-                    tag_ids.append(tag.id)
-                    break
-        return tag_ids
-
-    def _find_correspondent_id(self, correspondent_name: str | None) -> int | None:
-        """Find correspondent ID by name (case-insensitive)."""
-        if not correspondent_name:
-            return None
-        correspondent_name_lower = correspondent_name.lower()
-        for corr in self._correspondents:
-            if corr.name.lower() == correspondent_name_lower:
-                return corr.id
-        return None
-
     def _get_storage_path_name(self, storage_path_id: int | None) -> str | None:
         """Get storage path name from ID."""
         if storage_path_id is None:
@@ -295,14 +294,4 @@ class CategorizationEngine:
         for spath in self._storage_paths:
             if spath.id == storage_path_id:
                 return spath.name
-        return None
-
-    def _find_storage_path_id(self, storage_path_name: str | None) -> int | None:
-        """Find storage path ID by name (case-insensitive)."""
-        if not storage_path_name:
-            return None
-        storage_path_name_lower = storage_path_name.lower()
-        for spath in self._storage_paths:
-            if spath.name.lower() == storage_path_name_lower:
-                return spath.id
         return None

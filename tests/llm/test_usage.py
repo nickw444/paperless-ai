@@ -51,7 +51,7 @@ def test_extract_claude_usage_from_json_stdout():
         "input_tokens": 1000,
         "output_tokens": 234
       },
-      "result": "TITLE: Test"
+      "structured_output": {"title": "Test"}
     }
     """
 
@@ -71,7 +71,7 @@ def test_extract_claude_usage_from_json_stdout():
 
 def test_extract_agent_usage_selects_provider_from_command():
     codex_usage = extract_agent_usage(
-        stdout="TITLE: Test",
+        stdout='{"title":"Test"}',
         stderr="--------\nmodel: gpt-5\nprovider: openai\n--------\ntokens used\n100\n",
         command=["codex", "exec"],
     )
@@ -79,8 +79,7 @@ def test_extract_agent_usage_selects_provider_from_command():
     assert codex_usage.total_tokens == 100
 
     claude_usage = extract_agent_usage(
-        stdout='{"type":"result","total_cost_usd":0.01,"usage":{"input_tokens":10,'
-        '"output_tokens":5}}',
+        stdout='{"type":"result","total_cost_usd":0.01,"usage":{"input_tokens":10,"output_tokens":5}}',
         stderr="",
         command=["claude", "-p", "hi"],
     )

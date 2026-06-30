@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
 
+from pydantic import BaseModel, Field
 
-@dataclass
-class AgentUsageMetadata:
+
+class AgentUsageMetadata(BaseModel):
     """Usage and billing metadata reported by an agent CLI invocation."""
 
     provider: str | None = None
@@ -22,10 +22,9 @@ class AgentUsageMetadata:
     duration_ms: int | None = None
     num_turns: int | None = None
     reasoning_effort: str | None = None
-    extra: dict[str, str] = field(default_factory=dict)
+    extra: dict[str, str] = Field(default_factory=dict)
 
     def has_displayable_fields(self) -> bool:
-        """Return True when any usage metadata was captured."""
         return any(
             value is not None
             for value in (
@@ -52,28 +51,36 @@ def extract_agent_usage(
     """Extract usage metadata from provider-specific CLI output."""
     if _is_codex_command(command):
         usage = extract_codex_usage(stderr, command)
-        return usage if usage.has_displayable_fields() else None
+        if usage.has_displayable_fields():
+            return usage
+        return None
 
     if _is_claude_command(command):
         usage = extract_claude_usage(stdout)
-        return usage if usage and usage.has_displayable_fields() else None
+        if usage and usage.has_displayable_fields():
+            return usage
 
     usage = extract_claude_usage(stdout)
     if usage and usage.has_displayable_fields():
         return usage
 
     usage = extract_codex_usage(stderr, command)
-    return usage if usage.has_displayable_fields() else None
+    if usage.has_displayable_fields():
+        return usage
+
+    return None
 
 
 def extract_codex_usage(stderr: str, command: list[str] | None = None) -> AgentUsageMetadata:
     """Parse Codex session metadata and token usage from stderr."""
     metadata = _parse_codex_session_metadata(stderr)
+    total_tokens = _parse_codex_total_tokens(stderr)
+
     usage = AgentUsageMetadata(
         provider=metadata.get("provider"),
         model=metadata.get("model") or _model_from_command(command or []),
         session_id=metadata.get("session id"),
-        total_tokens=_parse_codex_total_tokens(stderr),
+        total_tokens=total_tokens,
         reasoning_effort=metadata.get("reasoning effort"),
     )
 
@@ -86,7 +93,7 @@ def extract_codex_usage(stderr: str, command: list[str] | None = None) -> AgentU
 
 
 def extract_claude_usage(stdout: str) -> AgentUsageMetadata | None:
-    """Parse Claude JSON stdout for usage and cost metadata when available."""
+    """Parse Claude JSON stdout for usage and cost metadata."""
     if not stdout.strip():
         return None
 
@@ -133,9 +140,9 @@ def _claude_usage_from_envelope(data: dict[str, object]) -> AgentUsageMetadata:
         total_tokens=total_tokens,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
-        total_cost_usd=float(total_cost_usd) if isinstance(total_cost_usd, int | float) else None,
-        duration_ms=duration_ms if isinstance(duration_ms, int) else None,
-        num_turns=num_turns if isinstance(num_turns, int) else None,
+        total_cost_usd=float(total_cost_usd) if isinstance(total_cost_usd, (int, float)) else None,
+        duration_ms=int(duration_ms) if isinstance(duration_ms, int) else None,
+        num_turns=int(num_turns) if isinstance(num_turns, int) else None,
     )
 
 

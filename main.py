@@ -88,7 +88,7 @@ def list_inbox(output):
 @click.option("--limit", type=int, help="Process only first N documents")
 @click.option("--export", type=click.Path(), help="Export suggestions to file (JSON)")
 @click.option("--apply", is_flag=True, help="Apply changes after review")
-@click.option("--debug", is_flag=True, help="Print raw agent prompt, output, and metadata")
+@click.option("--debug", is_flag=True, help="Print agent inputs and outputs for inspection")
 def analyze(doc_id, output, limit, export, apply, debug):
     """Analyze inbox documents and suggest categorizations."""
     try:
@@ -126,10 +126,10 @@ def analyze(doc_id, output, limit, export, apply, debug):
             for i, doc in enumerate(documents, 1):
                 status.update(f"[bold green]Analyzing document {i}/{len(documents)}...")
                 suggestion = engine.categorize_document(doc)
-                if debug and engine.last_agent_response:
+                if debug and engine.last_agent_result:
                     print_agent_debug_traces(
                         console,
-                        engine.last_agent_response.debug_traces,
+                        engine.last_agent_result.debug_traces,
                         document_id=doc.id,
                     )
                 suggestions.append(suggestion)
@@ -180,13 +180,15 @@ def analyze(doc_id, output, limit, export, apply, debug):
                                         f"[bold green]Re-categorizing document {count_text}..."
                                     )
                                     new_suggestion = engine.categorize_document(doc)
-                                    if debug and engine.last_agent_response:
+                                    if debug and engine.last_agent_result:
                                         print_agent_debug_traces(
                                             console,
-                                            engine.last_agent_response.debug_traces,
+                                            engine.last_agent_result.debug_traces,
                                             document_id=doc.id,
                                         )
                                     new_suggestions.append(new_suggestion)
+                            for doc in docs_to_reprocess:
+                                engine.documents_with_new_entities.discard(doc.id)
                             # Replace old suggestions with new ones
                             for new_sugg in new_suggestions:
                                 for i, old_sugg in enumerate(suggestions):
@@ -224,6 +226,15 @@ def _apply_suggestions(engine, suggestions):
                 skipped_count += 1
                 continue
 
+            if engine.has_unresolved_new_correspondent(suggestion):
+                console.print(
+                    f"[yellow]⚠️[/yellow] Skipped document {suggestion.document_id}: "
+                    f"unresolved new correspondent "
+                    f"'{suggestion.suggested_correspondent}'"
+                )
+                skipped_count += 1
+                continue
+
             # Build tags list: include parsed tag + suggested tags
             tags = list(suggestion.suggested_tag_ids) if suggestion.suggested_tag_ids else []
             if parsed_tag_id not in tags:
@@ -233,7 +244,7 @@ def _apply_suggestions(engine, suggestions):
                 engine.paperless.update_document(
                     document_id=suggestion.document_id,
                     title=suggestion.suggested_title,
-                    correspondent=suggestion.suggested_correspondent_id,
+                    correspondent=engine.resolve_suggestion_correspondent_id(suggestion),
                     document_type=suggestion.suggested_type_id,
                     storage_path=suggestion.suggested_storage_path_id,
                     tags=tags,
@@ -263,6 +274,7 @@ def _show_new_entities_review(new_entities):
 def _create_new_entities(engine, new_entities):
     """Create new entities in Paperless (only correspondents)."""
     created = {"correspondents": 0}
+    created_names: list[str] = []
 
     with console.status("[bold green]Creating new correspondents...") as status:
         # Create correspondents
@@ -271,8 +283,11 @@ def _create_new_entities(engine, new_entities):
                 status.update(f"[bold green]Creating correspondent: {name}")
                 engine.paperless.create_correspondent(name)
                 created["correspondents"] += 1
+                created_names.append(name)
             except Exception as e:
                 console.print(f"[red]✗[/red] Failed to create correspondent '{name}': {e}")
+
+    engine.remove_pending_correspondents(created_names)
 
     # Invalidate cache so the engine will reload metadata
     engine._correspondents = None

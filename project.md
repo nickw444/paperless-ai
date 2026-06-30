@@ -65,7 +65,7 @@ paperless-ai/
 - [ ] Create temporary file in /tmp for OCR content (avoid command line length limits)
 - [ ] Build prompt that references the temp file path
 - [ ] Execute configured agent via subprocess (Claude: `claude -p "prompt with @/tmp/filename"`, Codex via stdin)
-- [ ] Parse the agent response (assume structured text output)
+- [ ] Validate JSON agent response against schema
 - [ ] Clean up temp file after processing (use context manager)
 - [ ] Handle errors and timeouts
 - [ ] Implement retry logic
@@ -134,11 +134,7 @@ Available document types: {types}
 Available tags: {tags}
 Available correspondents: {correspondents}
 
-Respond in the following format:
-TITLE: <suggested title>
-TYPE: <document type or "None">
-TAGS: <comma-separated tags or "None">
-CORRESPONDENT: <correspondent name or "None">"
+The agent response is validated against a JSON schema (title, document_type, tags, correspondent, storage_path).
 
 # Clean up temp file
 rm /tmp/paperless_doc_123.txt

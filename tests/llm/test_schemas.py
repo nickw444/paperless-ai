@@ -1,0 +1,212 @@
+"""Tests for JSON schema building and validation."""
+
+import json
+
+import pytest
+from pydantic import ValidationError
+
+from llm.prompts import format_available_options_json
+from llm.schemas import (
+    AvailableOptions,
+    CategorizationAgentOutput,
+    EntityOption,
+    build_categorization_json_schema,
+    is_pending_correspondent_id,
+    merge_correspondent_options,
+    pending_correspondent_id,
+    pending_correspondent_name,
+    schema_uses_forbidden_keywords,
+    validate_agent_output,
+)
+
+
+def _sample_options() -> AvailableOptions:
+    return AvailableOptions(
+        document_types=[
+            EntityOption(id=10, name="Invoice"),
+            EntityOption(id=11, name="Receipt"),
+        ],
+        tags=[
+            EntityOption(id=2, name="financial"),
+            EntityOption(id=3, name="2024"),
+        ],
+        correspondents=[EntityOption(id=5, name="Acme Corp")],
+        storage_paths=[EntityOption(id=7, name="Bills")],
+    )
+
+
+def test_build_categorization_json_schema_is_static_and_compact():
+    schema = build_categorization_json_schema()
+
+    assert schema["additionalProperties"] is False
+    assert schema_uses_forbidden_keywords(schema) is False
+    assert "enum" not in json.dumps(schema)
+
+    assert schema["properties"]["document_type_id"] == {"type": ["integer", "null"]}
+    assert schema["properties"]["tag_ids"] == {
+        "type": "array",
+        "items": {"type": "integer"},
+    }
+    assert schema["properties"]["correspondent_id"] == {"type": ["integer", "null"]}
+    assert schema["properties"]["storage_path_id"] == {"type": ["integer", "null"]}
+    assert schema["properties"]["new_correspondent_name"]["type"] == ["string", "null"]
+
+
+def test_build_categorization_json_schema_does_not_vary_with_options():
+    schema_a = build_categorization_json_schema()
+    schema_b = build_categorization_json_schema()
+    assert schema_a == schema_b
+
+
+def test_build_categorization_json_schema_is_json_serializable():
+    schema = build_categorization_json_schema()
+    serialized = json.dumps(schema)
+    assert "oneOf" not in serialized
+
+
+def test_format_available_options_json_is_compact():
+    options = _sample_options()
+    rendered = format_available_options_json(options)
+
+    assert "\n" not in rendered
+    parsed = json.loads(rendered)
+    assert parsed["document_types"][0] == {"id": 10, "name": "Invoice"}
+    assert "pending_correspondents" not in parsed
+
+
+def test_validate_categorization_output_accepts_valid_payload():
+    options = _sample_options()
+    output = validate_agent_output(
+        CategorizationAgentOutput.model_validate(
+            {
+                "title": "Invoice - Acme - Jan 2024",
+                "document_type_id": 10,
+                "tag_ids": [2],
+                "correspondent_id": 5,
+                "new_correspondent_name": None,
+                "storage_path_id": None,
+            }
+        ),
+        options,
+    )
+
+    assert output.title == "Invoice - Acme - Jan 2024"
+    assert output.document_type_id == 10
+    assert output.tag_ids == [2]
+
+
+def test_validate_agent_output_rejects_invalid_tag_id():
+    options = _sample_options()
+    output = CategorizationAgentOutput.model_validate(
+        {
+            "title": "Test",
+            "document_type_id": None,
+            "tag_ids": [999],
+            "correspondent_id": None,
+            "new_correspondent_name": None,
+            "storage_path_id": None,
+        }
+    )
+
+    with pytest.raises(ValueError, match="Invalid tag_ids"):
+        validate_agent_output(output, options)
+
+
+def test_validate_agent_output_rejects_duplicate_tags():
+    options = _sample_options()
+    output = CategorizationAgentOutput.model_validate(
+        {
+            "title": "Test",
+            "document_type_id": None,
+            "tag_ids": [2, 2],
+            "correspondent_id": None,
+            "new_correspondent_name": None,
+            "storage_path_id": None,
+        }
+    )
+
+    with pytest.raises(ValueError, match="unique"):
+        validate_agent_output(output, options)
+
+
+def test_validate_agent_output_rejects_new_name_matching_existing():
+    options = _sample_options()
+    output = CategorizationAgentOutput.model_validate(
+        {
+            "title": "Test",
+            "document_type_id": None,
+            "tag_ids": [],
+            "correspondent_id": None,
+            "new_correspondent_name": "acme corp",
+            "storage_path_id": None,
+        }
+    )
+
+    with pytest.raises(ValueError, match="matches existing correspondent"):
+        validate_agent_output(output, options)
+
+
+def test_categorization_output_rejects_both_correspondent_fields():
+    with pytest.raises(ValidationError):
+        CategorizationAgentOutput.model_validate(
+            {
+                "title": "Test",
+                "document_type_id": None,
+                "tag_ids": [],
+                "correspondent_id": 5,
+                "new_correspondent_name": "New Corp",
+                "storage_path_id": None,
+            }
+        )
+
+
+def test_merge_correspondent_options_appends_pending_with_negative_ids():
+    merged = merge_correspondent_options(
+        [EntityOption(id=5, name="Acme Corp")],
+        ["Pending Co", "Another Pending"],
+    )
+
+    assert merged == [
+        EntityOption(id=5, name="Acme Corp"),
+        EntityOption(id=-1, name="Pending Co"),
+        EntityOption(id=-2, name="Another Pending"),
+    ]
+
+
+def test_pending_correspondent_name_round_trip():
+    pending_names = ["Pending Co", "Another Pending"]
+    assert pending_correspondent_name(pending_correspondent_id(0), pending_names) == "Pending Co"
+    assert pending_correspondent_name(pending_correspondent_id(1), pending_names) == (
+        "Another Pending"
+    )
+    assert is_pending_correspondent_id(-1) is True
+    assert is_pending_correspondent_id(5) is False
+
+
+def test_validate_agent_output_accepts_pending_correspondent_id():
+    options = AvailableOptions(
+        correspondents=merge_correspondent_options(
+            [EntityOption(id=5, name="Acme Corp")],
+            ["Pending Co"],
+        ),
+    )
+    output = validate_agent_output(
+        CategorizationAgentOutput.model_validate(
+            {
+                "title": "Invoice",
+                "document_type_id": None,
+                "tag_ids": [],
+                "correspondent_id": -1,
+                "new_correspondent_name": None,
+                "storage_path_id": None,
+            }
+        ),
+        options,
+    )
+
+    assert output.correspondent_id == -1
+
+
+def test_validate_categorization_output_rejects_missing_title():
+    with pytest.raises(ValidationError):
+        CategorizationAgentOutput.model_validate({"tag_ids": []})

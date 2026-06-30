@@ -23,7 +23,7 @@ Manually categorizing documents in Paperless-ngx is time-consuming. This tool au
 
 1. **Fetch documents**: Retrieves uncategorized documents from your Paperless-ngx inbox
 2. **Analyze content**: Sends OCR text to the configured agent along with your available metadata options
-3. **Generate suggestions**: The agent suggests appropriate categorizations, preferring existing entities
+3. **Generate suggestions**: The agent returns JSON validated against a schema, preferring existing entities
 4. **Review**: Displays suggestions in a formatted table for your review
 5. **Apply changes**: Optionally updates documents in Paperless-ngx and tags them as processed
 
@@ -61,6 +61,13 @@ CODEX_REASONING_EFFORT=minimal
 ```
 
 Both agents share the same `CLAUDE_MAX_CONTENT_CHARS` setting by default; set `CODEX_MAX_CONTENT_CHARS` if you need a different limit when using Codex.
+
+### CLI version requirements
+
+Agent responses are JSON-only, enforced by schema at invocation time:
+
+- **Claude**: Claude Code CLI with `--output-format json` and `--json-schema` support
+- **Codex**: Codex CLI with `exec --output-schema` support
 
 ## Usage
 
@@ -124,4 +131,9 @@ uv run ruff check .
 Format code:
 ```bash
 uv run ruff format .
+```
+
+Run tests:
+```bash
+uv run pytest tests/
 ```

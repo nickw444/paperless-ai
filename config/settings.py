@@ -27,17 +27,14 @@ class Settings(BaseSettings):
     )
     claude_model: str | None = Field(default="sonnet", description="Claude model to use")
     codex_command: str = Field(default="codex", description="Path to Codex CLI")
-    codex_model: str | None = Field(
-        default="gpt-5", description="Codex model to use"
-    )
+    codex_model: str | None = Field(default="gpt-5", description="Codex model to use")
     codex_timeout: int | None = Field(
         default=120, description="Timeout override for Codex responses in seconds"
     )
     codex_max_content_chars: int | None = Field(
         default=None,
         description=(
-            "Maximum characters of document content to send to Codex "
-            "(defaults to the Claude limit)"
+            "Maximum characters of document content to send to Codex (defaults to the Claude limit)"
         ),
     )
     codex_reasoning_effort: str | None = Field(
@@ -59,6 +56,7 @@ class Settings(BaseSettings):
         if normalized not in {"claude", "codex"}:
             raise ValueError("AI_AGENT must be either 'claude' or 'codex'")
         return normalized
+
 
 def load_settings() -> Settings:
     """Load settings from .env file and environment variables."""
