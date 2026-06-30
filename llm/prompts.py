@@ -14,13 +14,14 @@ Based on the document content, current_metadata, and available_options:
 1. Suggest an appropriate title (concise, descriptive). Use current_metadata.title as context:
    keep descriptive manual titles; improve generic filenames (e.g. scan.pdf) using OCR content.
 2. Set document_type_id to the best matching id from available_options.document_types,
-   or null. Use current_metadata.document_type as starting context; change only when OCR
-   supports a better match.
+   or null. When current_metadata.document_type is set and still appropriate, return its id;
+   change only when OCR supports a better match.
 3. Set tag_ids to relevant ids from available_options.tags (empty list if none apply).
-   Use current_metadata.tags as context; add or remove tags only when OCR supports the change.
+   Use current_metadata.tags as context; when the same tags still apply, return their ids;
+   add or remove only when OCR supports the change.
 4. Set correspondent_id to a matching id from available_options.correspondents, OR set
    new_correspondent_name when no listed correspondent fits (not both).
-   Use current_metadata.correspondent as starting context when present.
+   When current_metadata.correspondent is set and still appropriate, return its id.
 
 CORRESPONDENT MATCHING:
 - Scan available_options.correspondents for exact matches first (case-insensitive)
@@ -29,7 +30,7 @@ CORRESPONDENT MATCHING:
 - Normalize new names: drop legal suffixes (Inc., LLC), URLs, and excess punctuation
 
 5. Set storage_path_id to the best matching id from available_options.storage_paths, or null.
-   Use current_metadata.storage_path as starting context when present.
+   When current_metadata.storage_path is set and still appropriate, return its id.
 
 SEMANTIC TAG MATCHING:
 - Tags should reflect what the document IS ABOUT, not keywords that merely appear in it
@@ -47,6 +48,7 @@ def build_categorization_preamble() -> str:
 
 Below you will receive:
 - current_metadata: JSON with the document's existing Paperless fields before categorization.
+  Entity fields use {{"id": <int>, "name": "<str>"}} (or null when unset).
 - ocr_content: OCR text of the document. Use this text for analysis.
 - available_options: JSON listing valid Paperless entities as {{"id": <int>, "name": "<str>"}}.
 

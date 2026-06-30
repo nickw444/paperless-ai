@@ -125,10 +125,10 @@ class CategorizationEngine:
 
         current_metadata = CurrentMetadata(
             title=document.title,
-            document_type=current_type_name,
-            tags=current_tag_names,
-            correspondent=current_correspondent_name,
-            storage_path=current_storage_path_name,
+            document_type=self._to_entity_option(document.document_type, self._document_types),
+            tags=self._get_tag_options(document.tags),
+            correspondent=self._to_entity_option(document.correspondent, self._correspondents),
+            storage_path=self._to_entity_option(document.storage_path, self._storage_paths),
         )
 
         result = self.agent.categorize_document(
@@ -274,6 +274,25 @@ class CategorizationEngine:
         if not suggestion.suggested_correspondent_is_new:
             return False
         return self.resolve_suggestion_correspondent_id(suggestion) is None
+
+    def _to_entity_option(self, entity_id: int | None, entities) -> EntityOption | None:
+        """Map a Paperless entity id to an EntityOption."""
+        if entity_id is None:
+            return None
+        for entity in entities:
+            if entity.id == entity_id:
+                return EntityOption(id=entity.id, name=entity.name)
+        return None
+
+    def _get_tag_options(self, tag_ids: list[int]) -> list[EntityOption]:
+        """Get tag EntityOptions from IDs, preserving document order."""
+        options: list[EntityOption] = []
+        for tag_id in tag_ids:
+            for tag in self._tags:
+                if tag.id == tag_id:
+                    options.append(EntityOption(id=tag.id, name=tag.name))
+                    break
+        return options
 
     def _get_type_name(self, type_id: int | None) -> str | None:
         """Get document type name from ID."""

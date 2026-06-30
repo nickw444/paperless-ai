@@ -221,3 +221,16 @@ def test_current_metadata_defaults_optional_fields():
     assert metadata.tags == []
     assert metadata.correspondent is None
     assert metadata.storage_path is None
+
+
+def test_current_metadata_serializes_entity_options():
+    metadata = CurrentMetadata(
+        title="Invoice",
+        document_type=EntityOption(id=10, name="Invoice"),
+        tags=[EntityOption(id=1, name="Inbox")],
+        correspondent=EntityOption(id=5, name="Acme Corp"),
+        storage_path=EntityOption(id=7, name="Bills"),
+    )
+
+    assert metadata.document_type == EntityOption(id=10, name="Invoice")
+    assert metadata.correspondent == EntityOption(id=5, name="Acme Corp")

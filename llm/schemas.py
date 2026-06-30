@@ -43,10 +43,10 @@ class CurrentMetadata(BaseModel):
     """Existing Paperless metadata for a document before categorization."""
 
     title: str
-    document_type: str | None = None
-    tags: list[str] = Field(default_factory=list)
-    correspondent: str | None = None
-    storage_path: str | None = None
+    document_type: EntityOption | None = None
+    tags: list[EntityOption] = Field(default_factory=list)
+    correspondent: EntityOption | None = None
+    storage_path: EntityOption | None = None
 
 
 class AvailableOptions(BaseModel):

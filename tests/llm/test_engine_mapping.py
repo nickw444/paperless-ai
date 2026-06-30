@@ -209,7 +209,7 @@ def test_engine_forwards_current_metadata_to_agent():
     metadata = captured["metadata"]
     assert metadata.title == "scan.pdf"
     assert metadata.document_type is None
-    assert metadata.tags == ["Inbox"]
+    assert metadata.tags == [EntityOption(id=1, name="Inbox")]
     assert metadata.correspondent is None
     assert metadata.storage_path is None
 

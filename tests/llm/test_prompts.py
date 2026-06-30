@@ -13,7 +13,7 @@ def _sample_current_metadata() -> CurrentMetadata:
     return CurrentMetadata(
         title="scan.pdf",
         document_type=None,
-        tags=["Inbox"],
+        tags=[EntityOption(id=1, name="Inbox")],
         correspondent=None,
         storage_path=None,
     )
@@ -37,7 +37,7 @@ def test_build_categorization_prompt_puts_instructions_before_data():
     assert "Invoice total $42" in prompt
     assert '"document_types":[{"id":1,"name":"Bill"}]' in prompt
     assert '"title":"scan.pdf"' in prompt
-    assert '"tags":["Inbox"]' in prompt
+    assert '"tags":[{"id":1,"name":"Inbox"}]' in prompt
 
 
 def test_build_categorization_prompt_with_files_puts_instructions_before_refs():
@@ -82,9 +82,17 @@ def test_materialize_prompt_for_debug_inlines_file_backed_prompt():
 
 def test_format_current_metadata_json_is_compact():
     rendered = format_current_metadata_json(
-        CurrentMetadata(title="Manual Title", tags=["financial", "Inbox"])
+        CurrentMetadata(
+            title="Manual Title",
+            tags=[
+                EntityOption(id=2, name="financial"),
+                EntityOption(id=1, name="Inbox"),
+            ],
+            correspondent=EntityOption(id=5, name="Acme Corp"),
+        )
     )
 
     assert "\n" not in rendered
     assert '"title":"Manual Title"' in rendered
-    assert '"tags":["financial","Inbox"]' in rendered
+    assert '"tags":[{"id":2,"name":"financial"},{"id":1,"name":"Inbox"}]' in rendered
+    assert '"correspondent":{"id":5,"name":"Acme Corp"}' in rendered
