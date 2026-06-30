@@ -1,7 +1,7 @@
-"""Pytest configuration and shared fixtures."""
+"""Shared pytest configuration."""
 
 import os
 
-# Ensure required settings exist when tests import application modules.
-os.environ.setdefault("PAPERLESS_URL", "http://localhost:8000")
+os.environ.setdefault("PAPERLESS_URL", "http://paperless.example")
 os.environ.setdefault("PAPERLESS_API_TOKEN", "test-token")
+os.environ.setdefault("AI_AGENT", "codex")
