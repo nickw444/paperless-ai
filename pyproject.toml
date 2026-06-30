@@ -17,7 +17,10 @@ dependencies = [
 paperless-ai = "main:cli"
 
 [dependency-groups]
-dev = ["ruff>=0.8.4"]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.8.4",
+]
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -1,6 +1,6 @@
 """Categorization engine that orchestrates document analysis."""
 
-from llm.base import CommandLineAgent
+from llm.base import AgentResponse, CommandLineAgent
 from paperless.client import PaperlessClient
 from paperless.models import (
     CategorizationSuggestion,
@@ -27,6 +27,7 @@ class CategorizationEngine:
             "correspondents": {},  # name -> list of doc_ids
         }
         self.documents_with_new_entities: set[int] = set()  # Track which docs need re-processing
+        self.last_agent_response: AgentResponse | None = None
 
     def _load_metadata(self):
         """Load and cache all metadata from Paperless."""
@@ -122,6 +123,7 @@ class CategorizationEngine:
             available_correspondents,
             available_storage_paths,
         )
+        self.last_agent_response = agent_response
 
         # Handle agent errors
         if agent_response.error:

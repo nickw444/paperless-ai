@@ -8,6 +8,7 @@ from rich.console import Console
 from rich.table import Table
 
 from categorizer.engine import CategorizationEngine
+from llm.debug import print_agent_debug_traces
 from llm.factory import create_agent
 from paperless.client import PaperlessClient
 
@@ -87,10 +88,11 @@ def list_inbox(output):
 @click.option("--limit", type=int, help="Process only first N documents")
 @click.option("--export", type=click.Path(), help="Export suggestions to file (JSON)")
 @click.option("--apply", is_flag=True, help="Apply changes after review")
-def analyze(doc_id, output, limit, export, apply):
+@click.option("--debug", is_flag=True, help="Print raw agent prompt, output, and metadata")
+def analyze(doc_id, output, limit, export, apply, debug):
     """Analyze inbox documents and suggest categorizations."""
     try:
-        agent = create_agent()
+        agent = create_agent(debug=debug)
         engine = CategorizationEngine(agent=agent)
         client = engine.paperless
 
@@ -124,6 +126,12 @@ def analyze(doc_id, output, limit, export, apply):
             for i, doc in enumerate(documents, 1):
                 status.update(f"[bold green]Analyzing document {i}/{len(documents)}...")
                 suggestion = engine.categorize_document(doc)
+                if debug and engine.last_agent_response:
+                    print_agent_debug_traces(
+                        console,
+                        engine.last_agent_response.debug_traces,
+                        document_id=doc.id,
+                    )
                 suggestions.append(suggestion)
 
         # Export if requested
@@ -172,6 +180,12 @@ def analyze(doc_id, output, limit, export, apply):
                                         f"[bold green]Re-categorizing document {count_text}..."
                                     )
                                     new_suggestion = engine.categorize_document(doc)
+                                    if debug and engine.last_agent_response:
+                                        print_agent_debug_traces(
+                                            console,
+                                            engine.last_agent_response.debug_traces,
+                                            document_id=doc.id,
+                                        )
                                     new_suggestions.append(new_suggestion)
                             # Replace old suggestions with new ones
                             for new_sugg in new_suggestions:

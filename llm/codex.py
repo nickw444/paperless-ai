@@ -9,10 +9,11 @@ from llm.base import CommandLineAgent
 class CodexClient(CommandLineAgent):
     """Client wrapper around the Codex CLI."""
 
-    def __init__(self):
+    def __init__(self, *, debug: bool = False):
         super().__init__(
             timeout=settings.codex_timeout or settings.claude_timeout,
             max_content_chars=settings.codex_max_content_chars or settings.claude_max_content_chars,
+            debug=debug,
         )
         self.command = settings.codex_command
         self.model = settings.codex_model

@@ -94,6 +94,11 @@ Analyze a specific document:
 python main.py analyze --id 123
 ```
 
+Inspect raw agent input and output:
+```bash
+python main.py analyze --id 123 --debug
+```
+
 Export suggestions to JSON:
 ```bash
 python main.py analyze --export suggestions.json
@@ -107,6 +112,7 @@ python main.py analyze --export suggestions.json
 - **Incremental workflow**: Already-processed documents are automatically excluded
 - **Inbox preservation**: Keeps inbox tags for manual review workflows
 - **JSON export**: Save suggestions for later review or automation
+- **Debug mode**: Print raw agent prompts, responses, and available token/cost metadata
 
 ## Development
 

@@ -9,10 +9,11 @@ from llm.base import CommandLineAgent
 class ClaudeClient(CommandLineAgent):
     """Client wrapper around the Claude Code CLI."""
 
-    def __init__(self):
+    def __init__(self, *, debug: bool = False):
         super().__init__(
             timeout=settings.claude_timeout,
             max_content_chars=settings.claude_max_content_chars,
+            debug=debug,
         )
         self.command = settings.claude_command
         self.model = settings.claude_model

@@ -8,9 +8,25 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from llm.usage import AgentUsageMetadata, extract_agent_usage
+
+
+@dataclass
+class AgentDebugTrace:
+    """Captured inputs and outputs from a single agent invocation attempt."""
+
+    attempt: int
+    prompt: str
+    resolved_prompt: str | None = None
+    command: list[str] = field(default_factory=list)
+    stdout: str = ""
+    stderr: str = ""
+    usage_metadata: AgentUsageMetadata | None = None
+    error: str | None = None
 
 
 @dataclass
@@ -29,15 +45,24 @@ class AgentResponse:
     storage_path_is_new: bool = False
     raw_response: str = ""
     error: str | None = None
+    debug_traces: list[AgentDebugTrace] = field(default_factory=list)
 
 
 class CommandLineAgent(ABC):
     """Reusable workflow for running categorization via CLI-based LLM agents."""
 
-    def __init__(self, *, timeout: int, max_content_chars: int, max_retries: int = 3):
+    def __init__(
+        self,
+        *,
+        timeout: int,
+        max_content_chars: int,
+        max_retries: int = 3,
+        debug: bool = False,
+    ):
         self.timeout = timeout
         self.max_content_chars = max_content_chars
         self.max_retries = max_retries
+        self.debug = debug
 
     def categorize_document(
         self,
@@ -49,9 +74,11 @@ class CommandLineAgent(ABC):
     ) -> AgentResponse:
         """Execute the agent to categorize a document."""
         prepared_content = self._prepare_content(ocr_content)
+        debug_traces: list[AgentDebugTrace] = []
 
         for attempt in range(self.max_retries):
             temp_file_path: str | None = None
+            trace = AgentDebugTrace(attempt=attempt + 1, prompt="")
             try:
                 temp_file_path = self._write_temp_file(prepared_content)
                 prompt = self._build_prompt(
@@ -62,6 +89,13 @@ class CommandLineAgent(ABC):
                     available_correspondents=available_correspondents,
                     available_storage_paths=available_storage_paths,
                 )
+                trace.prompt = prompt
+                if self.debug:
+                    trace.resolved_prompt = self._materialize_prompt_for_debug(
+                        prompt=prompt,
+                        temp_path=temp_file_path,
+                        content=prepared_content,
+                    )
                 session_id = self._generate_session_id()
                 command, extra_kwargs = self._build_subprocess_args(
                     prompt=prompt,
@@ -69,6 +103,7 @@ class CommandLineAgent(ABC):
                     session_id=session_id,
                     content=prepared_content,
                 )
+                trace.command = command
                 result = subprocess.run(
                     command,
                     capture_output=True,
@@ -77,21 +112,51 @@ class CommandLineAgent(ABC):
                     check=True,
                     **extra_kwargs,
                 )
-                return self._parse_response(result.stdout)
+                trace.stdout = result.stdout
+                trace.stderr = result.stderr or ""
+                trace.usage_metadata = extract_agent_usage(
+                    stdout=trace.stdout,
+                    stderr=trace.stderr,
+                    command=trace.command,
+                )
+                parsed = self._parse_response(result.stdout)
+                if self.debug:
+                    debug_traces.append(trace)
+                    parsed.debug_traces = debug_traces
+                return parsed
             except subprocess.TimeoutExpired:
+                trace.error = "Agent request timed out"
+                if self.debug:
+                    debug_traces.append(trace)
                 if attempt < self.max_retries - 1:
                     time.sleep(2**attempt)
                     continue
-                return AgentResponse(error="Agent request timed out after multiple retries")
+                return AgentResponse(
+                    error="Agent request timed out after multiple retries",
+                    debug_traces=debug_traces,
+                )
             except subprocess.CalledProcessError as exc:
-                return AgentResponse(error=self._format_process_error(exc))
+                trace.error = self._format_process_error(exc)
+                trace.stdout = exc.stdout or ""
+                trace.stderr = exc.stderr or ""
+                trace.usage_metadata = extract_agent_usage(
+                    stdout=trace.stdout,
+                    stderr=trace.stderr,
+                    command=trace.command,
+                )
+                if self.debug:
+                    debug_traces.append(trace)
+                return AgentResponse(error=trace.error, debug_traces=debug_traces)
             except Exception as exc:  # noqa: BLE001 - bubble unexpected issues to callers
-                return AgentResponse(error=f"Unexpected error: {exc}")
+                trace.error = f"Unexpected error: {exc}"
+                if self.debug:
+                    debug_traces.append(trace)
+                return AgentResponse(error=trace.error, debug_traces=debug_traces)
             finally:
                 if temp_file_path:
                     Path(temp_file_path).unlink(missing_ok=True)
 
-        return AgentResponse(error="Failed to get response from agent")
+        return AgentResponse(error="Failed to get response from agent", debug_traces=debug_traces)
 
     def _prepare_content(self, ocr_content: str) -> str:
         """Optionally truncate the OCR content to a manageable size."""
@@ -111,6 +176,12 @@ class CommandLineAgent(ABC):
         ) as temp_file:
             temp_file.write(content)
             return temp_file.name
+
+    def _materialize_prompt_for_debug(self, *, prompt: str, temp_path: str, content: str) -> str:
+        """Return the prompt with file-backed inputs included for debug display."""
+        if f"@{temp_path}" not in prompt:
+            return prompt
+        return f"{prompt}\n\n--- file: {temp_path} ---\n{content}"
 
     def _generate_session_id(self) -> str | None:
         """Generate a session identifier when the agent supports one."""

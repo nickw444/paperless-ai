@@ -5,11 +5,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
     paperless_url: str = Field(..., description="URL of the Paperless-ngx instance")
     paperless_api_token: str = Field(..., description="API token for Paperless-ngx")
@@ -57,11 +59,6 @@ class Settings(BaseSettings):
         if normalized not in {"claude", "codex"}:
             raise ValueError("AI_AGENT must be either 'claude' or 'codex'")
         return normalized
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-
 
 def load_settings() -> Settings:
     """Load settings from .env file and environment variables."""
