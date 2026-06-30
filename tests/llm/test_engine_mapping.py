@@ -10,7 +10,7 @@ from llm.schemas import (
     CurrentMetadata,
     EntityOption,
 )
-from paperless.models import Document, DocumentType, Tag
+from paperless.models import Document, DocumentAttachment, DocumentType, Tag
 
 
 class StubAgent:
@@ -24,12 +24,15 @@ class StubAgent:
         ocr_content: str,
         available_options: AvailableOptions,
         current_metadata: CurrentMetadata,
+        attachment: DocumentAttachment | None = None,
     ) -> AgentCategorizationResult:
-        del ocr_content, available_options, current_metadata
+        del ocr_content, available_options, current_metadata, attachment
         return self._result
 
 
 class StubPaperless:
+    attachment: DocumentAttachment | None = None
+
     def list_tags(self):
         return [
             Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
@@ -44,6 +47,10 @@ class StubPaperless:
 
     def list_storage_paths(self):
         return []
+
+    def download_document_attachment(self, document):
+        del document
+        return self.attachment
 
 
 def _make_document() -> Document:
@@ -172,8 +179,9 @@ def test_engine_forwards_current_metadata_to_agent():
             ocr_content: str,
             available_options: AvailableOptions,
             current_metadata: CurrentMetadata,
+            attachment: DocumentAttachment | None = None,
         ):
-            del ocr_content, available_options
+            del ocr_content, available_options, attachment
             captured["metadata"] = current_metadata
             return AgentCategorizationResult(
                 output=CategorizationAgentOutput(
@@ -212,8 +220,9 @@ def test_engine_includes_pending_correspondents_in_agent_options():
             ocr_content: str,
             available_options: AvailableOptions,
             current_metadata: CurrentMetadata,
+            attachment: DocumentAttachment | None = None,
         ):
-            del ocr_content, current_metadata
+            del ocr_content, current_metadata, attachment
             captured["options"] = available_options
             return AgentCategorizationResult(
                 output=CategorizationAgentOutput(
@@ -296,3 +305,70 @@ def test_remove_pending_correspondents_drops_pseudo_options():
     engine.remove_pending_correspondents(["Acme Corp"])
 
     assert "Acme Corp" not in engine.new_entities_found["correspondents"]
+
+
+def test_engine_calls_agent_for_empty_ocr_when_attachment_exists(tmp_path):
+    captured: dict[str, str | DocumentAttachment | None] = {}
+    attachment_path = tmp_path / "source.pdf"
+    attachment_path.write_bytes(b"%PDF")
+
+    class CapturingAgent(StubAgent):
+        def categorize_document(
+            self,
+            ocr_content: str,
+            available_options: AvailableOptions,
+            current_metadata: CurrentMetadata,
+            attachment: DocumentAttachment | None = None,
+        ):
+            del available_options, current_metadata
+            captured["ocr_content"] = ocr_content
+            captured["attachment"] = attachment
+            return AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Attachment only",
+                    document_type_id=10,
+                    tag_ids=[2],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+
+    paperless = StubPaperless()
+    paperless.attachment = DocumentAttachment(
+        path=str(attachment_path),
+        source="archived",
+        mime_type="application/pdf",
+        filename="source.pdf",
+    )
+    engine = CategorizationEngine(agent=CapturingAgent(AgentCategorizationResult()))
+    engine.paperless = paperless
+    engine._tags = engine.paperless.list_tags()
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+    document = _make_document()
+    document.content = ""
+
+    suggestion = engine.categorize_document(document)
+
+    assert suggestion.status == "success"
+    assert captured["ocr_content"] == ""
+    assert captured["attachment"] == paperless.attachment
+    assert not attachment_path.exists()
+
+
+def test_engine_returns_error_for_empty_ocr_without_attachment():
+    engine = CategorizationEngine(agent=StubAgent(AgentCategorizationResult()))
+    engine.paperless = StubPaperless()
+    engine._tags = engine.paperless.list_tags()
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+    document = _make_document()
+    document.content = ""
+
+    suggestion = engine.categorize_document(document)
+
+    assert suggestion.status == "error"
+    assert suggestion.error_message == "Document has no OCR content or supported attachment"

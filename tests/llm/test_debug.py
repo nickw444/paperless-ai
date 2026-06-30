@@ -5,7 +5,13 @@ from io import StringIO
 from rich.console import Console
 
 from llm.debug import _raw_agent_response, format_usage_metadata, print_agent_debug_traces
-from llm.schemas import AgentDebugTrace, AvailableOptions, CategorizationAgentOutput, EntityOption
+from llm.schemas import (
+    AgentDebugTrace,
+    AttachmentDebugMetadata,
+    AvailableOptions,
+    CategorizationAgentOutput,
+    EntityOption,
+)
 from llm.usage import AgentUsageMetadata
 
 
@@ -93,3 +99,31 @@ def test_format_usage_metadata_includes_cost_and_token_breakdown():
     assert "tokens: 1,250 (input: 1,000, output: 250)" in lines
     assert "cost: $0.0042" in lines
     assert "duration: 900 ms" in lines
+
+
+def test_print_agent_debug_traces_shows_attachment_metadata_only():
+    output = StringIO()
+    console = Console(file=output, width=120)
+    trace = AgentDebugTrace(
+        attempt=1,
+        prompt="prompt",
+        prepared_content_chars=1,
+        ocr_preview="x",
+        attachment=AttachmentDebugMetadata(
+            path="/tmp/source.pdf",
+            source="archived",
+            mime_type="application/pdf",
+            filename="source.pdf",
+            byte_size=123,
+        ),
+        available_options=AvailableOptions(),
+        json_schema={},
+    )
+
+    print_agent_debug_traces(console, [trace])
+
+    rendered = output.getvalue()
+    assert "--- attachment ---" in rendered
+    assert "source: archived" in rendered
+    assert "mime_type: application/pdf" in rendered
+    assert "bytes: 123" in rendered

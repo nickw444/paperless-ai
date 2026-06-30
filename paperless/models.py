@@ -73,8 +73,20 @@ class Document(BaseModel):
     archive_serial_number: int | None = None
     original_file_name: str
     archived_file_name: str | None = None
+    mime_type: str | None = None
+    page_count: int | None = None
     owner: int | None = None
     user_can_change: bool = True
+
+
+class DocumentAttachment(BaseModel):
+    """Downloaded document file supplied to the categorization agent."""
+
+    path: str
+    source: str
+    mime_type: str
+    filename: str
+    byte_size: int | None = None
 
 
 class CategorizationSuggestion(BaseModel):

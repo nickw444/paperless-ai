@@ -1,7 +1,10 @@
 """Paperless-ngx API client."""
 
+import re
+import tempfile
 import time
 from typing import Any
+from urllib.parse import unquote
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -11,11 +14,76 @@ from config.settings import settings
 from paperless.models import (
     Correspondent,
     Document,
+    DocumentAttachment,
     DocumentType,
     PaginatedResponse,
     StoragePath,
     Tag,
 )
+
+
+def _content_type_mime(content_type: str | None) -> str | None:
+    """Return the bare MIME type from a Content-Type header."""
+    if not content_type:
+        return None
+    return content_type.split(";", 1)[0].strip().lower()
+
+
+def _is_supported_mime_type(mime_type: str | None, supported_mime_types: set[str]) -> bool:
+    """Return whether the MIME type can be attached to an agent request."""
+    if not mime_type:
+        return False
+    return mime_type.lower() in supported_mime_types
+
+
+def _safe_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _filename_from_content_disposition(content_disposition: str | None) -> str | None:
+    """Extract a filename from a Content-Disposition header."""
+    if not content_disposition:
+        return None
+
+    encoded_match = re.search(r"filename\*=utf-8''([^;]+)", content_disposition, re.IGNORECASE)
+    if encoded_match:
+        return unquote(encoded_match.group(1)).strip('"')
+
+    quoted_match = re.search(r'filename="([^"]+)"', content_disposition, re.IGNORECASE)
+    if quoted_match:
+        return quoted_match.group(1)
+
+    bare_match = re.search(r"filename=([^;]+)", content_disposition, re.IGNORECASE)
+    if bare_match:
+        return bare_match.group(1).strip().strip('"')
+
+    return None
+
+
+def _suffix_for_attachment(filename: str, mime_type: str) -> str:
+    """Choose a filename suffix that preserves useful type information."""
+    if "." in filename:
+        suffix = "." + filename.rsplit(".", 1)[1]
+        if len(suffix) <= 10:
+            return suffix
+
+    return {
+        "application/pdf": ".pdf",
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+    }.get(mime_type, "")
+
+
+def _cleanup_and_none(path: str) -> None:
+    from pathlib import Path
+
+    Path(path).unlink(missing_ok=True)
+    return None
 
 
 class PaperlessClient:
@@ -49,6 +117,31 @@ class PaperlessClient:
             response = self.session.get(url, params=params, timeout=30)
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401:
+                raise ConnectionError("Authentication failed. Check your API token.") from e
+            elif e.response.status_code == 404:
+                raise ValueError(f"Resource not found: {url}") from e
+            else:
+                raise ConnectionError(f"API request failed: {e}") from e
+        except requests.exceptions.Timeout as e:
+            raise TimeoutError(f"Request timed out: {url}") from e
+        except requests.exceptions.ConnectionError as e:
+            raise ConnectionError(f"Failed to connect to Paperless: {url}") from e
+
+    def _get_response(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        *,
+        stream: bool = False,
+    ) -> requests.Response:
+        """Make a raw GET request for non-JSON responses."""
+        url = f"{self.base_url}{endpoint}"
+        try:
+            response = self.session.get(url, params=params, timeout=30, stream=stream)
+            response.raise_for_status()
+            return response
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
                 raise ConnectionError("Authentication failed. Check your API token.") from e
@@ -146,6 +239,93 @@ class PaperlessClient:
         """Get a specific document by ID."""
         data = self._get(f"/api/documents/{document_id}/")
         return Document(**data)
+
+    def download_document_attachment(self, document: Document) -> DocumentAttachment | None:
+        """Download the best supported document file for agent context."""
+        if not settings.enable_document_attachments:
+            return None
+
+        supported_mime_types = set(settings.parsed_supported_attachment_mime_types)
+        if document.mime_type is None or _is_supported_mime_type(
+            document.mime_type,
+            supported_mime_types,
+        ):
+            attachment = self._download_supported_attachment(
+                document=document,
+                source="original",
+                params={"original": "true"},
+                fallback_filename=document.original_file_name,
+                supported_mime_types=supported_mime_types,
+            )
+            if attachment:
+                return attachment
+
+        return self._download_supported_attachment(
+            document=document,
+            source="archived",
+            params=None,
+            fallback_filename=document.archived_file_name or document.original_file_name,
+            supported_mime_types=supported_mime_types,
+        )
+
+    def _download_supported_attachment(
+        self,
+        *,
+        document: Document,
+        source: str,
+        params: dict[str, str] | None,
+        fallback_filename: str,
+        supported_mime_types: set[str],
+    ) -> DocumentAttachment | None:
+        try:
+            response = self._get_response(
+                f"/api/documents/{document.id}/download/",
+                params=params,
+                stream=True,
+            )
+        except (ConnectionError, TimeoutError, ValueError):
+            return None
+
+        with response:
+            mime_type = _content_type_mime(response.headers.get("content-type"))
+            if not _is_supported_mime_type(mime_type, supported_mime_types):
+                return None
+
+            content_length = _safe_int(response.headers.get("content-length"))
+            if content_length is not None and content_length > settings.max_attachment_bytes:
+                return None
+
+            filename = (
+                _filename_from_content_disposition(response.headers.get("content-disposition"))
+                or fallback_filename
+            )
+            suffix = _suffix_for_attachment(filename, mime_type)
+            temp_file = tempfile.NamedTemporaryFile(
+                mode="wb",
+                suffix=suffix,
+                delete=False,
+                prefix="paperless_attachment_",
+            )
+            bytes_written = 0
+            try:
+                with temp_file:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if not chunk:
+                            continue
+                        bytes_written += len(chunk)
+                        if bytes_written > settings.max_attachment_bytes:
+                            return _cleanup_and_none(temp_file.name)
+                        temp_file.write(chunk)
+            except Exception:
+                return _cleanup_and_none(temp_file.name)
+
+        return DocumentAttachment(
+            path=temp_file.name,
+            source=source,
+            mime_type=mime_type,
+            filename=filename,
+            byte_size=bytes_written,
+        )
 
     def list_tags(self) -> list[Tag]:
         """List all available tags."""

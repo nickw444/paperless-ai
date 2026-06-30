@@ -26,12 +26,33 @@ class Settings(BaseSettings):
         default="minimal",
         description='Codex reasoning effort passed via "--config model_reasoning_effort=<value>"',
     )
+    enable_document_attachments: bool = Field(
+        default=True,
+        description="Download supported Paperless document files for agent context",
+    )
+    max_attachment_bytes: int = Field(
+        default=20_000_000,
+        description="Maximum downloaded document attachment size in bytes",
+    )
+    supported_attachment_mime_types: str = Field(
+        default="application/pdf,image/jpeg,image/png",
+        description="MIME types that can be supplied as document attachments",
+    )
 
     @field_validator("paperless_url")
     @classmethod
     def validate_url(cls, v: str) -> str:
         """Ensure URL doesn't end with a trailing slash."""
         return v.rstrip("/")
+
+    @property
+    def parsed_supported_attachment_mime_types(self) -> list[str]:
+        """Return supported attachment MIME types as a normalized list."""
+        return [
+            item.strip().lower()
+            for item in self.supported_attachment_mime_types.split(",")
+            if item.strip()
+        ]
 
 
 def load_settings() -> Settings:
@@ -61,6 +82,19 @@ def load_settings() -> Settings:
         )
         print(
             '  - CODEX_REASONING_EFFORT: Reasoning effort (default: "minimal")',
+            file=sys.stderr,
+        )
+        print(
+            "  - ENABLE_DOCUMENT_ATTACHMENTS: Download supported files for context (default: true)",
+            file=sys.stderr,
+        )
+        print(
+            "  - MAX_ATTACHMENT_BYTES: Max attachment size in bytes (default: 20000000)",
+            file=sys.stderr,
+        )
+        print(
+            "  - SUPPORTED_ATTACHMENT_MIME_TYPES: Comma-separated MIME types "
+            "(default: application/pdf,image/jpeg,image/png)",
             file=sys.stderr,
         )
         sys.exit(1)

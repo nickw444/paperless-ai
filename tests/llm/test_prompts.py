@@ -5,6 +5,7 @@ from llm.prompts import (
     format_current_metadata_json,
 )
 from llm.schemas import AvailableOptions, CurrentMetadata, EntityOption
+from paperless.models import DocumentAttachment
 
 
 def _sample_current_metadata() -> CurrentMetadata:
@@ -36,6 +37,29 @@ def test_build_categorization_prompt_puts_instructions_before_data():
     assert '"document_types":[{"id":1,"name":"Bill"}]' in prompt
     assert '"title":"scan.pdf"' in prompt
     assert '"tags":[{"id":1,"name":"Inbox"}]' in prompt
+
+
+def test_build_categorization_prompt_includes_attachment_block():
+    prompt = build_categorization_prompt(
+        content="Invoice total $42",
+        available_options=AvailableOptions(),
+        current_metadata=_sample_current_metadata(),
+        attachment=DocumentAttachment(
+            path="/tmp/source.pdf",
+            source="archived",
+            mime_type="application/pdf",
+            filename="source.pdf",
+            byte_size=123,
+        ),
+    )
+
+    attachment_index = prompt.index("<document_attachment>")
+    metadata_index = prompt.index("<current_metadata>")
+
+    assert attachment_index < metadata_index
+    assert "@/tmp/source.pdf" in prompt
+    assert "mime_type: application/pdf" in prompt
+    assert "filename: source.pdf" in prompt
 
 
 def test_format_current_metadata_json_is_compact():

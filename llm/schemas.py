@@ -7,6 +7,7 @@ from typing import Any, Protocol
 from pydantic import BaseModel, Field, model_validator
 
 from llm.usage import AgentUsageMetadata
+from paperless.models import DocumentAttachment
 
 
 class EntityOption(BaseModel):
@@ -73,6 +74,16 @@ class AvailableOptions(BaseModel):
         return {option.name.lower() for option in self.correspondents}
 
 
+class AttachmentDebugMetadata(BaseModel):
+    """Safe-to-print metadata for a document attachment."""
+
+    path: str
+    source: str
+    mime_type: str
+    filename: str
+    byte_size: int | None = None
+
+
 def is_pending_correspondent_id(correspondent_id: int) -> bool:
     """Return True when the id is a batch-local pseudo id for a pending correspondent."""
     return correspondent_id < 0
@@ -119,6 +130,7 @@ class AgentDebugTrace(BaseModel):
     prompt: str
     prepared_content_chars: int
     ocr_preview: str
+    attachment: AttachmentDebugMetadata | None = None
     available_options: AvailableOptions
     json_schema: dict[str, Any]
     command: list[str] = Field(default_factory=list)
@@ -148,6 +160,7 @@ class DocumentCategorizer(Protocol):
         ocr_content: str,
         available_options: AvailableOptions,
         current_metadata: CurrentMetadata,
+        attachment: DocumentAttachment | None = None,
     ) -> AgentCategorizationResult: ...
 
 

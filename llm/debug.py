@@ -33,6 +33,15 @@ def print_agent_debug_traces(
             for line in format_usage_metadata(usage):
                 console.print(line)
 
+        if trace.attachment:
+            console.print("\n[dim]--- attachment ---[/dim]")
+            console.print(f"path: {trace.attachment.path}")
+            console.print(f"source: {trace.attachment.source}")
+            console.print(f"mime_type: {trace.attachment.mime_type}")
+            console.print(f"filename: {trace.attachment.filename}")
+            if trace.attachment.byte_size is not None:
+                console.print(f"bytes: {trace.attachment.byte_size}")
+
         console.print("\n[dim]--- prompt ---[/dim]")
         console.print(trace.prompt)
 

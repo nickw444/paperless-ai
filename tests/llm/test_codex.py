@@ -9,6 +9,7 @@ import pytest
 
 from llm.codex import CodexAgent, _read_structured_output
 from llm.schemas import AvailableOptions, CurrentMetadata, EntityOption
+from paperless.models import DocumentAttachment
 
 
 def test_read_structured_output_reads_json_file(tmp_path: Path):
@@ -65,6 +66,49 @@ def test_build_command_assembles_codex_exec_args():
         "-",
     ]
     assert extra_kwargs == {"input": "categorize this"}
+
+
+def test_build_command_adds_image_attachment_flag():
+    agent = CodexAgent.__new__(CodexAgent)
+    agent.command = "codex"
+    agent.model = "gpt-5.4-mini"
+    agent.reasoning_effort = None
+
+    command, _ = agent._build_command(
+        prompt="prompt",
+        schema_path="/tmp/schema.json",
+        output_path="/tmp/output.json",
+        attachment=DocumentAttachment(
+            path="/tmp/source.png",
+            source="original",
+            mime_type="image/png",
+            filename="source.png",
+        ),
+    )
+
+    assert "--image" in command
+    assert command[command.index("--image") + 1] == "/tmp/source.png"
+
+
+def test_build_command_does_not_add_image_flag_for_pdf_attachment():
+    agent = CodexAgent.__new__(CodexAgent)
+    agent.command = "codex"
+    agent.model = "gpt-5"
+    agent.reasoning_effort = None
+
+    command, _ = agent._build_command(
+        prompt="prompt",
+        schema_path="/tmp/schema.json",
+        output_path="/tmp/output.json",
+        attachment=DocumentAttachment(
+            path="/tmp/source.pdf",
+            source="archived",
+            mime_type="application/pdf",
+            filename="source.pdf",
+        ),
+    )
+
+    assert "--image" not in command
 
 
 def test_build_command_omits_reasoning_effort_when_unset():
@@ -130,6 +174,12 @@ def test_categorize_document_runs_codex_subprocess_and_validates_output():
             ocr_content="Invoice from Acme Corp for $100",
             available_options=_sample_options(),
             current_metadata=_sample_metadata(),
+            attachment=DocumentAttachment(
+                path="/tmp/source.pdf",
+                source="archived",
+                mime_type="application/pdf",
+                filename="source.pdf",
+            ),
         )
 
     assert result.error is None
@@ -140,6 +190,7 @@ def test_categorize_document_runs_codex_subprocess_and_validates_output():
     assert captured["command"][0] == "codex"
     assert captured["command"][1] == "exec"
     assert "Invoice from Acme Corp" in captured["input"]
+    assert "@/tmp/source.pdf" in captured["input"]
 
 
 def test_categorize_document_returns_error_when_codex_fails():

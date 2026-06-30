@@ -16,6 +16,7 @@ from llm.prompts import build_categorization_prompt
 from llm.schemas import (
     AgentCategorizationResult,
     AgentDebugTrace,
+    AttachmentDebugMetadata,
     AvailableOptions,
     CategorizationAgentOutput,
     CurrentMetadata,
@@ -23,8 +24,10 @@ from llm.schemas import (
     validate_agent_output,
 )
 from llm.usage import extract_usage
+from paperless.models import DocumentAttachment
 
 OCR_PREVIEW_CHARS = 500
+CODEX_IMAGE_MIME_TYPES = frozenset({"image/jpeg", "image/png"})
 
 
 def _read_structured_output(output_path: str) -> dict[str, Any]:
@@ -56,6 +59,7 @@ class CodexAgent:
         ocr_content: str,
         available_options: AvailableOptions,
         current_metadata: CurrentMetadata,
+        attachment: DocumentAttachment | None = None,
     ) -> AgentCategorizationResult:
         """Execute Codex to categorize a document."""
         prepared_content = self._prepare_content(ocr_content)
@@ -72,6 +76,7 @@ class CodexAgent:
                 prepared_content=prepared_content,
                 available_options=available_options,
                 json_schema=json_schema,
+                attachment=attachment,
             )
             try:
                 schema_path = self._write_json_temp_file(json_schema)
@@ -84,6 +89,7 @@ class CodexAgent:
                     content=prepared_content,
                     available_options=available_options,
                     current_metadata=current_metadata,
+                    attachment=attachment,
                 )
                 trace.prompt = prompt
 
@@ -91,6 +97,7 @@ class CodexAgent:
                     prompt=prompt,
                     schema_path=schema_path,
                     output_path=output_path,
+                    attachment=attachment,
                 )
                 trace.command = command
 
@@ -185,11 +192,14 @@ class CodexAgent:
         prompt: str,
         schema_path: str,
         output_path: str,
+        attachment: DocumentAttachment | None = None,
     ) -> tuple[list[str], dict[str, Any]]:
         """Construct subprocess arguments for the Codex CLI."""
         command = [self.command, "exec", "--model", self.model or "gpt-5"]
         if self.reasoning_effort:
             command += ["--config", f'model_reasoning_effort="{self.reasoning_effort}"']
+        if attachment and attachment.mime_type in CODEX_IMAGE_MIME_TYPES:
+            command += ["--image", attachment.path]
         command += ["--output-schema", schema_path, "-o", output_path, "-"]
         return command, {"input": prompt}
 
@@ -200,6 +210,7 @@ class CodexAgent:
         prepared_content: str,
         available_options: AvailableOptions,
         json_schema: dict[str, Any],
+        attachment: DocumentAttachment | None,
     ) -> AgentDebugTrace:
         """Create a debug trace with common input fields."""
         return AgentDebugTrace(
@@ -207,6 +218,7 @@ class CodexAgent:
             prompt="",
             prepared_content_chars=len(prepared_content),
             ocr_preview=prepared_content[:OCR_PREVIEW_CHARS],
+            attachment=_attachment_debug_metadata(attachment),
             available_options=available_options,
             json_schema=json_schema,
         )
@@ -251,3 +263,17 @@ class CodexAgent:
         if error.stdout:
             message += f"\nStdout: {error.stdout.strip()}"
         return message
+
+
+def _attachment_debug_metadata(
+    attachment: DocumentAttachment | None,
+) -> AttachmentDebugMetadata | None:
+    if attachment is None:
+        return None
+    return AttachmentDebugMetadata(
+        path=attachment.path,
+        source=attachment.source,
+        mime_type=attachment.mime_type,
+        filename=attachment.filename,
+        byte_size=attachment.byte_size,
+    )

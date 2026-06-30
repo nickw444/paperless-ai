@@ -4,7 +4,7 @@ Automated document categorization for Paperless-ngx using the OpenAI Codex CLI.
 
 ## What it does
 
-paperless-ai analyzes documents in your Paperless-ngx inbox and suggests appropriate metadata (titles, tags, correspondents, document types, and storage paths). It uses the Codex CLI to read OCR content and make intelligent categorization decisions based on your existing Paperless setup.
+paperless-ai analyzes documents in your Paperless-ngx inbox and suggests appropriate metadata (titles, tags, correspondents, document types, and storage paths). It uses the Codex CLI to read OCR content and, when possible, supported source document attachments for clearer context.
 
 By using the Codex CLI instead of a direct API, you can process documents using the subscriptions you already have (for example ChatGPT Plus) without paying per-token API costs. This makes it economical to categorize large batches of documents.
 
@@ -22,7 +22,7 @@ Manually categorizing documents in Paperless-ngx is time-consuming. This tool au
 ## How it works
 
 1. **Fetch documents**: Retrieves uncategorized documents from your Paperless-ngx inbox
-2. **Analyze content**: Sends OCR text to Codex along with your available metadata options
+2. **Analyze content**: Sends OCR text, supported document attachments, and your available metadata options to Codex
 3. **Generate suggestions**: Codex returns JSON validated against a schema, preferring existing entities
 4. **Review**: Displays suggestions in a formatted table for your review
 5. **Apply changes**: Optionally updates documents in Paperless-ngx and tags them as processed
@@ -51,6 +51,11 @@ CODEX_MODEL=gpt-5          # Optional, defaults to gpt-5
 CODEX_TIMEOUT=120
 CODEX_MAX_CONTENT_CHARS=2000
 CODEX_REASONING_EFFORT=minimal
+
+# Document attachments
+ENABLE_DOCUMENT_ATTACHMENTS=true
+MAX_ATTACHMENT_BYTES=20000000
+SUPPORTED_ATTACHMENT_MIME_TYPES=application/pdf,image/jpeg,image/png
 ```
 
 ### CLI version requirements
@@ -108,6 +113,7 @@ python main.py analyze --export suggestions.json
 - **Inbox preservation**: Keeps inbox tags for manual review workflows
 - **JSON export**: Save suggestions for later review or automation
 - **Debug mode**: Print raw agent prompts, responses, and available token/cost metadata
+- **Document attachments**: Adds supported PDF/JPEG/PNG document files alongside OCR context where available
 
 ## Development
 

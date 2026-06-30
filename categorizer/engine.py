@@ -1,5 +1,7 @@
 """Categorization engine that orchestrates document analysis."""
 
+from pathlib import Path
+
 from llm.schemas import (
     AgentCategorizationResult,
     AvailableOptions,
@@ -93,9 +95,11 @@ class CategorizationEngine:
         current_tag_names = self._get_tag_names(document.tags)
         current_correspondent_name = self._get_correspondent_name(document.correspondent)
         current_storage_path_name = self._get_storage_path_name(document.storage_path)
+        attachment = self.paperless.download_document_attachment(document)
 
-        # Skip if document has no content
-        if not document.content or not document.content.strip():
+        # Skip only when neither OCR nor a supported source document is available.
+        has_ocr_content = bool(document.content and document.content.strip())
+        if not has_ocr_content and attachment is None:
             return CategorizationSuggestion(
                 document_id=document.id,
                 current_title=document.title,
@@ -108,7 +112,7 @@ class CategorizationEngine:
                 current_storage_path=document.storage_path,
                 current_storage_path_name=current_storage_path_name,
                 status="error",
-                error_message="Document has no OCR content",
+                error_message="Document has no OCR content or supported attachment",
             )
 
         pending_new_correspondents = list(self.new_entities_found["correspondents"].keys())
@@ -131,12 +135,17 @@ class CategorizationEngine:
             storage_path=self._to_entity_option(document.storage_path, self._storage_paths),
         )
 
-        result = self.agent.categorize_document(
-            document.content,
-            available_options,
-            current_metadata,
-        )
-        self.last_agent_result = result
+        try:
+            result = self.agent.categorize_document(
+                document.content,
+                available_options,
+                current_metadata,
+                attachment=attachment,
+            )
+            self.last_agent_result = result
+        finally:
+            if attachment:
+                Path(attachment.path).unlink(missing_ok=True)
 
         if result.error or result.output is None:
             return CategorizationSuggestion(

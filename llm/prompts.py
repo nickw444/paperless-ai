@@ -3,6 +3,7 @@
 import json
 
 from llm.schemas import AvailableOptions, CurrentMetadata
+from paperless.models import DocumentAttachment
 
 
 def build_categorization_instructions() -> str:
@@ -15,10 +16,10 @@ Based on the document content, current_metadata, and available_options:
    keep descriptive manual titles; improve generic filenames (e.g. scan.pdf) using OCR content.
 2. Set document_type_id to the best matching id from available_options.document_types,
    or null. When current_metadata.document_type is set and still appropriate, return its id;
-   change only when OCR supports a better match.
+   change only when OCR or attachment context supports a better match.
 3. Set tag_ids to relevant ids from available_options.tags (empty list if none apply).
    Use current_metadata.tags as context; when the same tags still apply, return their ids;
-   add or remove only when OCR supports the change.
+   add or remove only when OCR or attachment context supports the change.
 4. Set correspondent_id to a matching id from available_options.correspondents, OR set
    new_correspondent_name when no listed correspondent fits (not both).
    When current_metadata.correspondent is set and still appropriate, return its id.
@@ -49,8 +50,13 @@ def build_categorization_preamble() -> str:
 Below you will receive:
 - current_metadata: JSON with the document's existing Paperless fields before categorization.
   Entity fields use {{"id": <int>, "name": "<str>"}} (or null when unset).
-- ocr_content: OCR text of the document. Use this text for analysis.
+- ocr_content: OCR text of the document, when available.
+- document_attachment: Optional source document file that may provide clearer visual
+  context than OCR.
 - available_options: JSON listing valid Paperless entities as {{"id": <int>, "name": "<str>"}}.
+
+Use the document attachment and OCR together when both are available. Prefer the attachment for
+visual layout, handwriting, forms, logos, and OCR mistakes, but keep OCR as useful text context.
 
 {instructions}"""
 
@@ -92,14 +98,28 @@ def build_categorization_prompt(
     content: str,
     available_options: AvailableOptions,
     current_metadata: CurrentMetadata,
+    attachment: DocumentAttachment | None = None,
 ) -> str:
     """Build a full categorization prompt with instructions first, then inline data."""
+    attachment_block = _format_attachment_block(attachment)
+    categorization_data = build_embedded_categorization_data(
+        content=content,
+        available_options=available_options,
+        current_metadata=current_metadata,
+    )
     return f"""{build_categorization_preamble()}
 
-{
-        build_embedded_categorization_data(
-            content=content,
-            available_options=available_options,
-            current_metadata=current_metadata,
-        )
-    }"""
+{attachment_block}{categorization_data}"""
+
+
+def _format_attachment_block(attachment: DocumentAttachment | None) -> str:
+    if attachment is None:
+        return ""
+    return f"""<document_attachment>
+path: @{attachment.path}
+source: {attachment.source}
+mime_type: {attachment.mime_type}
+filename: {attachment.filename}
+</document_attachment>
+
+"""
