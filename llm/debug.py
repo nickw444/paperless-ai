@@ -88,9 +88,7 @@ def _format_token_line(usage: AgentUsageMetadata) -> str | None:
         input_tokens = usage.input_tokens or 0
         output_tokens = usage.output_tokens or 0
         total = (
-            usage.total_tokens
-            if usage.total_tokens is not None
-            else input_tokens + output_tokens
+            usage.total_tokens if usage.total_tokens is not None else input_tokens + output_tokens
         )
         return f"tokens: {total:,} (input: {input_tokens:,}, output: {output_tokens:,})"
 
