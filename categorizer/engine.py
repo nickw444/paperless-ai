@@ -22,7 +22,7 @@ from paperless.models import (
 
 
 class CategorizationEngine:
-    """Engine for categorizing documents using LLM agents and Paperless metadata."""
+    """Engine for categorizing documents using the Codex agent and Paperless metadata."""
 
     def __init__(self, agent: DocumentCategorizer):
         """Initialize the categorization engine."""
