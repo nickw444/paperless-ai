@@ -8,6 +8,7 @@ from llm.schemas import (
     AgentCategorizationResult,
     AvailableOptions,
     CategorizationAgentOutput,
+    CurrentMetadata,
     EntityOption,
 )
 from paperless.models import Document, DocumentType, Tag
@@ -24,8 +25,9 @@ class StubAgent(CommandLineAgent):
         self,
         ocr_content: str,
         available_options: AvailableOptions,
+        current_metadata: CurrentMetadata,
     ) -> AgentCategorizationResult:
-        del ocr_content, available_options
+        del ocr_content, available_options, current_metadata
         return self._result
 
     def _extract_structured_payload(self, stdout: str, output_path: str | None) -> dict:
@@ -102,6 +104,48 @@ def test_engine_maps_id_based_output_to_suggestion():
     assert suggestion.suggested_correspondent_is_new is True
 
 
+def test_engine_preserves_tag_order_when_tag_set_unchanged():
+    agent = StubAgent(
+        AgentCategorizationResult(
+            output=CategorizationAgentOutput(
+                title="Invoice - Acme",
+                document_type_id=10,
+                tag_ids=[3, 2, 1],
+                correspondent_id=None,
+                new_correspondent_name=None,
+                storage_path_id=None,
+            )
+        )
+    )
+    engine = CategorizationEngine(agent=agent)
+    engine.paperless = StubPaperless()
+    engine._tags = [
+        Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
+        Tag(id=2, name="financial", slug="financial"),
+        Tag(id=3, name="From Email", slug="from-email"),
+    ]
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    document = Document(
+        id=42,
+        title="scan.pdf",
+        content="Invoice from Acme for $100",
+        tags=[1, 2, 3],
+        created=datetime(2024, 1, 1),
+        created_date="2024-01-01",
+        modified=datetime(2024, 1, 1),
+        added=datetime(2024, 1, 1),
+        original_file_name="scan.pdf",
+    )
+
+    suggestion = engine.categorize_document(document)
+
+    assert suggestion.suggested_tag_ids == [1, 2, 3]
+    assert suggestion.suggested_tags == ["Inbox", "financial", "From Email"]
+
+
 def test_engine_maps_pending_correspondent_id_to_new_suggestion():
     agent = StubAgent(
         AgentCategorizationResult(
@@ -130,11 +174,57 @@ def test_engine_maps_pending_correspondent_id_to_new_suggestion():
     assert suggestion.suggested_correspondent_is_new is True
 
 
+def test_engine_forwards_current_metadata_to_agent():
+    captured: dict[str, CurrentMetadata] = {}
+
+    class CapturingAgent(StubAgent):
+        def categorize_document(
+            self,
+            ocr_content: str,
+            available_options: AvailableOptions,
+            current_metadata: CurrentMetadata,
+        ):
+            del ocr_content, available_options
+            captured["metadata"] = current_metadata
+            return AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Invoice",
+                    document_type_id=10,
+                    tag_ids=[2],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+
+    engine = CategorizationEngine(agent=CapturingAgent(AgentCategorizationResult()))
+    engine.paperless = StubPaperless()
+    engine._tags = engine.paperless.list_tags()
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    engine.categorize_document(_make_document())
+
+    metadata = captured["metadata"]
+    assert metadata.title == "scan.pdf"
+    assert metadata.document_type is None
+    assert metadata.tags == ["Inbox"]
+    assert metadata.correspondent is None
+    assert metadata.storage_path is None
+
+
 def test_engine_includes_pending_correspondents_in_agent_options():
     captured: dict[str, AvailableOptions] = {}
 
     class CapturingAgent(StubAgent):
-        def categorize_document(self, ocr_content: str, available_options: AvailableOptions):
+        def categorize_document(
+            self,
+            ocr_content: str,
+            available_options: AvailableOptions,
+            current_metadata: CurrentMetadata,
+        ):
+            del ocr_content, current_metadata
             captured["options"] = available_options
             return AgentCategorizationResult(
                 output=CategorizationAgentOutput(

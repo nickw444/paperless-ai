@@ -327,11 +327,14 @@ def _display_suggestion(suggestion):
         console.print(f"  Type: {current_type}")
 
     # Tags
-    current_tags = (
-        ", ".join(suggestion.current_tag_names) if suggestion.current_tag_names else "None"
-    )
-    suggested_tags = ", ".join(suggestion.suggested_tags) if suggestion.suggested_tags else None
-    if suggested_tags and current_tags.lower() != suggested_tags.lower():
+    current_tag_names = suggestion.current_tag_names
+    suggested_tag_names = suggestion.suggested_tags
+    current_tags = ", ".join(current_tag_names) if current_tag_names else "None"
+    suggested_tags = ", ".join(suggested_tag_names) if suggested_tag_names else None
+    tags_unchanged = {name.lower() for name in current_tag_names} == {
+        name.lower() for name in suggested_tag_names
+    }
+    if suggested_tags and not tags_unchanged:
         console.print(f"  Tags: [dim]{current_tags}[/dim] -> [cyan]{suggested_tags}[/cyan]")
     elif current_tags != "None":
         console.print(f"  Tags: {current_tags}")

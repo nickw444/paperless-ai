@@ -39,6 +39,16 @@ class CategorizationAgentOutput(BaseModel):
         return self
 
 
+class CurrentMetadata(BaseModel):
+    """Existing Paperless metadata for a document before categorization."""
+
+    title: str
+    document_type: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    correspondent: str | None = None
+    storage_path: str | None = None
+
+
 class AvailableOptions(BaseModel):
     """Structured Paperless metadata options passed to the agent."""
 

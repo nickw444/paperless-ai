@@ -4,6 +4,7 @@ from llm.base import CommandLineAgent
 from llm.schemas import (
     AgentCategorizationResult,
     AvailableOptions,
+    CurrentMetadata,
     EntityOption,
     is_pending_correspondent_id,
     merge_correspondent_options,
@@ -122,7 +123,19 @@ class CategorizationEngine:
             storage_paths=[EntityOption(id=sp.id, name=sp.name) for sp in self._storage_paths],
         )
 
-        result = self.agent.categorize_document(document.content, available_options)
+        current_metadata = CurrentMetadata(
+            title=document.title,
+            document_type=current_type_name,
+            tags=current_tag_names,
+            correspondent=current_correspondent_name,
+            storage_path=current_storage_path_name,
+        )
+
+        result = self.agent.categorize_document(
+            document.content,
+            available_options,
+            current_metadata,
+        )
         self.last_agent_result = result
 
         if result.error or result.output is None:
@@ -158,6 +171,9 @@ class CategorizationEngine:
         inbox_tag_id = self._get_inbox_tag_id()
         if inbox_tag_id and inbox_tag_id in document.tags and inbox_tag_id not in suggested_tag_ids:
             suggested_tag_ids.append(inbox_tag_id)
+
+        if set(document.tags) == set(suggested_tag_ids):
+            suggested_tag_ids = list(document.tags)
 
         if output.correspondent_id is not None:
             if is_pending_correspondent_id(output.correspondent_id):

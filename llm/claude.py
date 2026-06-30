@@ -9,7 +9,7 @@ from config.settings import settings
 from llm.base import CommandLineAgent
 from llm.parsing import extract_claude_structured_output
 from llm.prompts import build_categorization_prompt_with_files
-from llm.schemas import AvailableOptions
+from llm.schemas import AvailableOptions, CurrentMetadata
 
 
 class ClaudeClient(CommandLineAgent):
@@ -36,12 +36,14 @@ class ClaudeClient(CommandLineAgent):
         temp_path: str,
         options_path: str,
         available_options: AvailableOptions,
+        current_metadata: CurrentMetadata,
     ) -> str:
         """Build the categorization prompt referencing the temp files."""
         del content, available_options
         return build_categorization_prompt_with_files(
             ocr_path=temp_path,
             options_path=options_path,
+            current_metadata=current_metadata,
         )
 
     def _build_subprocess_args(

@@ -19,6 +19,7 @@ from llm.schemas import (
     AgentDebugTrace,
     AvailableOptions,
     CategorizationAgentOutput,
+    CurrentMetadata,
     build_categorization_json_schema,
     validate_agent_output,
 )
@@ -47,6 +48,7 @@ class CommandLineAgent(ABC):
         self,
         ocr_content: str,
         available_options: AvailableOptions,
+        current_metadata: CurrentMetadata,
     ) -> AgentCategorizationResult:
         """Execute the agent to categorize a document."""
         prepared_content = self._prepare_content(ocr_content)
@@ -62,6 +64,7 @@ class CommandLineAgent(ABC):
                 attempt=attempt + 1,
                 prepared_content=prepared_content,
                 available_options=available_options,
+                current_metadata=current_metadata,
                 json_schema=json_schema,
             )
             try:
@@ -83,6 +86,7 @@ class CommandLineAgent(ABC):
                     temp_path=temp_file_path,
                     options_path=options_path,
                     available_options=available_options,
+                    current_metadata=current_metadata,
                 )
                 trace.prompt = prompt
                 if self.debug:
@@ -90,6 +94,7 @@ class CommandLineAgent(ABC):
                         prompt,
                         content=prepared_content,
                         available_options=available_options,
+                        current_metadata=current_metadata,
                     )
                 session_id = self._generate_session_id()
                 command, extra_kwargs, output_path = self._build_subprocess_args(
@@ -205,6 +210,7 @@ class CommandLineAgent(ABC):
         attempt: int,
         prepared_content: str,
         available_options: AvailableOptions,
+        current_metadata: CurrentMetadata,
         json_schema: dict[str, Any],
     ) -> AgentDebugTrace:
         """Create a debug trace with common input fields."""
@@ -295,6 +301,7 @@ class CommandLineAgent(ABC):
         temp_path: str,
         options_path: str,
         available_options: AvailableOptions,
+        current_metadata: CurrentMetadata,
     ) -> str:
         """Create the prompt that will be submitted to the agent."""
 

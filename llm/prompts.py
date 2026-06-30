@@ -2,7 +2,7 @@
 
 import json
 
-from llm.schemas import AvailableOptions
+from llm.schemas import AvailableOptions, CurrentMetadata
 
 
 def build_categorization_instructions() -> str:
@@ -10,12 +10,17 @@ def build_categorization_instructions() -> str:
     return """Return IDs from available_options in your response.
 Never return entity names for existing items.
 
-Based on the document content and available_options:
-1. Suggest an appropriate title (concise, descriptive)
-2. Set document_type_id to the best matching id from available_options.document_types, or null
-3. Set tag_ids to relevant ids from available_options.tags (empty list if none apply)
+Based on the document content, current_metadata, and available_options:
+1. Suggest an appropriate title (concise, descriptive). Use current_metadata.title as context:
+   keep descriptive manual titles; improve generic filenames (e.g. scan.pdf) using OCR content.
+2. Set document_type_id to the best matching id from available_options.document_types,
+   or null. Use current_metadata.document_type as starting context; change only when OCR
+   supports a better match.
+3. Set tag_ids to relevant ids from available_options.tags (empty list if none apply).
+   Use current_metadata.tags as context; add or remove tags only when OCR supports the change.
 4. Set correspondent_id to a matching id from available_options.correspondents, OR set
-   new_correspondent_name when no listed correspondent fits (not both)
+   new_correspondent_name when no listed correspondent fits (not both).
+   Use current_metadata.correspondent as starting context when present.
 
 CORRESPONDENT MATCHING:
 - Scan available_options.correspondents for exact matches first (case-insensitive)
@@ -23,7 +28,8 @@ CORRESPONDENT MATCHING:
 - Only use new_correspondent_name when no correspondent in the list fits
 - Normalize new names: drop legal suffixes (Inc., LLC), URLs, and excess punctuation
 
-5. Set storage_path_id to the best matching id from available_options.storage_paths, or null
+5. Set storage_path_id to the best matching id from available_options.storage_paths, or null.
+   Use current_metadata.storage_path as starting context when present.
 
 SEMANTIC TAG MATCHING:
 - Tags should reflect what the document IS ABOUT, not keywords that merely appear in it
@@ -40,7 +46,8 @@ def build_categorization_preamble() -> str:
     return f"""You are helping categorize a document in Paperless-ngx.
 
 Below you will receive:
-- ocr_content: OCR text of the document. Use ONLY this text for analysis.
+- current_metadata: JSON with the document's existing Paperless fields before categorization.
+- ocr_content: OCR text of the document. Use this text for analysis.
 - available_options: JSON listing valid Paperless entities as {{"id": <int>, "name": "<str>"}}.
 
 {instructions}"""
@@ -51,14 +58,25 @@ def format_available_options_json(available_options: AvailableOptions) -> str:
     return json.dumps(available_options.model_dump(), separators=(",", ":"))
 
 
+def format_current_metadata_json(current_metadata: CurrentMetadata) -> str:
+    """Serialize current metadata as compact JSON for embedding in prompts."""
+    return json.dumps(current_metadata.model_dump(), separators=(",", ":"))
+
+
 def build_embedded_categorization_data(
     *,
     content: str,
     available_options: AvailableOptions,
+    current_metadata: CurrentMetadata,
 ) -> str:
-    """Return tagged OCR and options blocks for inline prompt embedding."""
+    """Return tagged current metadata, OCR, and options blocks for inline prompt embedding."""
+    metadata_json = format_current_metadata_json(current_metadata)
     options_json = format_available_options_json(available_options)
-    return f"""<ocr_content>
+    return f"""<current_metadata>
+{metadata_json}
+</current_metadata>
+
+<ocr_content>
 {content}
 </ocr_content>
 
@@ -71,20 +89,33 @@ def build_categorization_prompt(
     *,
     content: str,
     available_options: AvailableOptions,
+    current_metadata: CurrentMetadata,
 ) -> str:
     """Build a full categorization prompt with instructions first, then inline data."""
     return f"""{build_categorization_preamble()}
 
-{build_embedded_categorization_data(content=content, available_options=available_options)}"""
+{
+        build_embedded_categorization_data(
+            content=content,
+            available_options=available_options,
+            current_metadata=current_metadata,
+        )
+    }"""
 
 
 def build_categorization_prompt_with_files(
     *,
     ocr_path: str,
     options_path: str,
+    current_metadata: CurrentMetadata,
 ) -> str:
     """Build a categorization prompt with file references after the instructions."""
+    metadata_json = format_current_metadata_json(current_metadata)
     return f"""{build_categorization_preamble()}
+
+<current_metadata>
+{metadata_json}
+</current_metadata>
 
 The OCR content is in: @{ocr_path}
 The available Paperless metadata options are in: @{options_path}"""
@@ -95,8 +126,13 @@ def materialize_prompt_for_debug(
     *,
     content: str,
     available_options: AvailableOptions,
+    current_metadata: CurrentMetadata,
 ) -> str | None:
     """Inline file-backed prompt contents for debug display."""
     if ": @" not in prompt:
         return None
-    return build_categorization_prompt(content=content, available_options=available_options)
+    return build_categorization_prompt(
+        content=content,
+        available_options=available_options,
+        current_metadata=current_metadata,
+    )

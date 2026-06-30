@@ -8,7 +8,7 @@ from config.settings import settings
 from llm.base import CommandLineAgent
 from llm.parsing import extract_codex_structured_output
 from llm.prompts import build_categorization_prompt
-from llm.schemas import AvailableOptions
+from llm.schemas import AvailableOptions, CurrentMetadata
 
 
 class CodexClient(CommandLineAgent):
@@ -42,10 +42,15 @@ class CodexClient(CommandLineAgent):
         temp_path: str,
         options_path: str,
         available_options: AvailableOptions,
+        current_metadata: CurrentMetadata,
     ) -> str:
         """Build the categorization prompt embedding the OCR content and options."""
         del temp_path, options_path
-        return build_categorization_prompt(content=content, available_options=available_options)
+        return build_categorization_prompt(
+            content=content,
+            available_options=available_options,
+            current_metadata=current_metadata,
+        )
 
     def _build_subprocess_args(
         self,

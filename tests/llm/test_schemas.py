@@ -9,6 +9,7 @@ from llm.prompts import format_available_options_json
 from llm.schemas import (
     AvailableOptions,
     CategorizationAgentOutput,
+    CurrentMetadata,
     EntityOption,
     build_categorization_json_schema,
     is_pending_correspondent_id,
@@ -210,3 +211,13 @@ def test_validate_agent_output_accepts_pending_correspondent_id():
 def test_validate_categorization_output_rejects_missing_title():
     with pytest.raises(ValidationError):
         CategorizationAgentOutput.model_validate({"tag_ids": []})
+
+
+def test_current_metadata_defaults_optional_fields():
+    metadata = CurrentMetadata(title="scan.pdf")
+
+    assert metadata.title == "scan.pdf"
+    assert metadata.document_type is None
+    assert metadata.tags == []
+    assert metadata.correspondent is None
+    assert metadata.storage_path is None
