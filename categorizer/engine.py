@@ -23,7 +23,9 @@ from paperless.models import (
     Tag,
 )
 
-ENGINE_MANAGED_TAG_NAMES = {"paperless-ai-parsed", "paperless-ai-failed"}
+PARSED_TAG_NAME = "paperless-ai-parsed"
+FAILED_TAG_NAME = "paperless-ai-failed"
+ENGINE_MANAGED_TAG_NAMES = {PARSED_TAG_NAME, FAILED_TAG_NAME}
 
 
 class CategorizationEngine:
@@ -85,17 +87,39 @@ class CategorizationEngine:
 
     def get_or_create_parsed_tag(self) -> int:
         """Get or create the 'paperless-ai-parsed' tag and return its ID."""
+        return self._get_or_create_tag(PARSED_TAG_NAME)
+
+    def get_or_create_failed_tag(self) -> int:
+        """Get or create the 'paperless-ai-failed' tag and return its ID."""
+        return self._get_or_create_tag(FAILED_TAG_NAME)
+
+    def get_tag_id_by_name(self, name: str) -> int | None:
+        """Return the ID for a tag name, if it exists."""
+        self._load_metadata()
+        name_lower = name.lower()
+        for tag in self._tags:
+            if tag.name.lower() == name_lower:
+                return tag.id
+        return None
+
+    def _get_or_create_tag(self, name: str) -> int:
+        """Get or create a Paperless tag and return its ID."""
+        self._load_metadata()
+        name_lower = name.lower()
         # Check if it already exists
         for tag in self._tags:
-            if tag.name.lower() == "paperless-ai-parsed":
+            if tag.name.lower() == name_lower:
                 return tag.id
 
         # Create it if it doesn't exist
-        new_tag = self.paperless.create_tag("paperless-ai-parsed")
+        new_tag = self.paperless.create_tag(name)
         # Invalidate cache and reload to include the new tag
         self._tags = None
         self._load_metadata()
         return new_tag.id
+
+    def _is_tracking_tag(self, tag: Tag) -> bool:
+        return tag.name.lower() in {PARSED_TAG_NAME, FAILED_TAG_NAME}
 
     def categorize_document(self, document: Document) -> CategorizationSuggestion:
         """
@@ -200,6 +224,21 @@ class CategorizationEngine:
             )
 
         output = result.output
+        if not has_ocr_content and attachment is not None and output.content is None:
+            return CategorizationSuggestion(
+                document_id=document.id,
+                current_title=document.title,
+                current_type=document.document_type,
+                current_type_name=current_type_name,
+                current_tags=document.tags,
+                current_tag_names=current_tag_names,
+                current_correspondent=document.correspondent,
+                current_correspondent_name=current_correspondent_name,
+                current_storage_path=document.storage_path,
+                current_storage_path_name=current_storage_path_name,
+                status="error",
+                error_message="Document attachment did not provide usable OCR content",
+            )
 
         new_correspondent_name = output.new_correspondent_name
 

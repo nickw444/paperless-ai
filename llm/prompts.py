@@ -18,8 +18,10 @@ Based on the document content, current_metadata, and available_options:
    Preserve the document's reading order and meaningful structure such as headings, labels,
    tables, line breaks, checkboxes, and form sections. Correct obvious OCR errors only when
    the intended text is clear from context. Do not summarize, add commentary, invent missing
-   values, or omit boilerplate text just because it is repetitive. Return null only when the
-   provided OCR content is already accurate enough or there is not enough evidence to improve it.
+   values, or omit boilerplate text just because it is repetitive. When ocr_content is empty
+   but a document_attachment is provided, extract usable text from the attachment into content.
+   Return null only when the provided OCR content is already accurate enough or there is not
+   enough evidence to improve or extract it.
 3. Set document_type_id to the best matching id from available_options.document_types,
    or null. When current_metadata.document_type is set and still appropriate, return its id;
    change only when OCR or attachment context supports a better match.

@@ -7,7 +7,7 @@ import click
 from rich.console import Console
 from rich.table import Table
 
-from categorizer.engine import CategorizationEngine
+from categorizer.engine import FAILED_TAG_NAME, PARSED_TAG_NAME, CategorizationEngine
 from llm.codex import CodexAgent
 from llm.debug import print_agent_debug_traces
 from paperless.client import PaperlessClient
@@ -100,19 +100,18 @@ def analyze(doc_id, output, limit, export, apply, debug):
         if doc_id:
             documents = [client.get_document(doc_id)]
         else:
-            # Exclude already-parsed documents (only when not analyzing a specific doc)
-            parsed_tag_id = None
+            # Exclude already-tracked documents (only when not analyzing a specific doc).
+            excluded_tag_ids = []
             try:
-                # Check if parsed tag exists, but don't create it yet
-                engine._load_metadata()
-                for tag in engine._tags:
-                    if tag.name.lower() == "paperless-ai-parsed":
-                        parsed_tag_id = tag.id
-                        break
+                # Check if tracking tags exist, but don't create them yet.
+                for tag_name in (PARSED_TAG_NAME, FAILED_TAG_NAME):
+                    tag_id = engine.get_tag_id_by_name(tag_name)
+                    if tag_id is not None:
+                        excluded_tag_ids.append(tag_id)
             except Exception:
                 pass  # If we can't check, continue without filtering
 
-            documents = client.list_inbox_documents(exclude_tag_id=parsed_tag_id)
+            documents = client.list_inbox_documents(exclude_tag_ids=excluded_tag_ids)
             if limit:
                 documents = documents[:limit]
 
@@ -211,19 +210,38 @@ def analyze(doc_id, output, limit, export, apply, debug):
 
 def _apply_suggestions(engine, suggestions):
     """Apply categorization suggestions to documents."""
-    # Get or create the paperless-ai-parsed tag
-    parsed_tag_id = engine.get_or_create_parsed_tag()
+    parsed_tag_id = None
+    failed_tag_id = None
 
     applied_count = 0
+    failed_tagged_count = 0
     skipped_count = 0
 
     with console.status("[bold green]Applying suggestions...") as status:
         for i, suggestion in enumerate(suggestions, 1):
             status.update(f"[bold green]Updating document {i}/{len(suggestions)}...")
 
-            # Skip if there was an error
+            # Track analysis failures so normal inbox runs do not retry them forever.
             if suggestion.status != "success":
-                skipped_count += 1
+                if failed_tag_id is None:
+                    failed_tag_id = engine.get_or_create_failed_tag()
+
+                tags = list(suggestion.current_tags)
+                if failed_tag_id not in tags:
+                    tags.append(failed_tag_id)
+
+                try:
+                    engine.paperless.update_document(
+                        document_id=suggestion.document_id,
+                        tags=tags,
+                    )
+                    failed_tagged_count += 1
+                except Exception as e:
+                    console.print(
+                        f"[red]✗[/red] Failed to tag document "
+                        f"{suggestion.document_id} as failed: {e}"
+                    )
+                    skipped_count += 1
                 continue
 
             if engine.has_unresolved_new_correspondent(suggestion):
@@ -234,6 +252,9 @@ def _apply_suggestions(engine, suggestions):
                 )
                 skipped_count += 1
                 continue
+
+            if parsed_tag_id is None:
+                parsed_tag_id = engine.get_or_create_parsed_tag()
 
             # Build tags list: include parsed tag + suggested tags
             tags = list(suggestion.suggested_tag_ids) if suggestion.suggested_tag_ids else []
@@ -258,6 +279,11 @@ def _apply_suggestions(engine, suggestions):
                 skipped_count += 1
 
     console.print(f"\n[green]✓[/green] Applied changes to {applied_count} document(s)")
+    if failed_tagged_count > 0:
+        console.print(
+            f"[yellow]⚠️[/yellow] Tagged {failed_tagged_count} failed document(s) "
+            f"with {FAILED_TAG_NAME}"
+        )
     if skipped_count > 0:
         console.print(f"[yellow]⚠️[/yellow] Skipped {skipped_count} document(s)")
 

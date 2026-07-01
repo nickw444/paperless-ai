@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from categorizer.engine import CategorizationEngine
+from categorizer.engine import FAILED_TAG_NAME, PARSED_TAG_NAME, CategorizationEngine
 from llm.schemas import (
     AgentCategorizationResult,
     AvailableOptions,
@@ -406,6 +406,47 @@ def test_engine_includes_pending_correspondents_in_agent_options():
     assert captured["options"].correspondents == [EntityOption(id=-1, name="Acme Corp")]
 
 
+def test_engine_excludes_tracking_tags_from_agent_options():
+    captured: dict[str, AvailableOptions] = {}
+
+    class CapturingAgent(StubAgent):
+        def categorize_document(
+            self,
+            ocr_content: str,
+            available_options: AvailableOptions,
+            current_metadata: CurrentMetadata,
+            attachment: DocumentAttachment | None = None,
+        ):
+            del ocr_content, current_metadata, attachment
+            captured["options"] = available_options
+            return AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Invoice",
+                    document_type_id=10,
+                    tag_ids=[2],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+
+    engine = CategorizationEngine(agent=CapturingAgent(AgentCategorizationResult()))
+    engine.paperless = StubPaperless()
+    engine._tags = [
+        Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
+        Tag(id=2, name="financial", slug="financial"),
+        Tag(id=3, name=PARSED_TAG_NAME, slug="paperless-ai-parsed"),
+        Tag(id=4, name=FAILED_TAG_NAME, slug="paperless-ai-failed"),
+    ]
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    engine.categorize_document(_make_document())
+
+    assert captured["options"].tags == [EntityOption(id=2, name="financial")]
+
+
 def test_engine_resolves_pending_correspondent_id_for_apply():
     from paperless.models import Correspondent
 
@@ -484,6 +525,7 @@ def test_engine_calls_agent_for_empty_ocr_when_attachment_exists(tmp_path):
             return AgentCategorizationResult(
                 output=CategorizationAgentOutput(
                     title="Attachment only",
+                    content="Extracted text from attachment",
                     document_type_id=10,
                     tag_ids=[2],
                     correspondent_id=None,
@@ -511,8 +553,50 @@ def test_engine_calls_agent_for_empty_ocr_when_attachment_exists(tmp_path):
     suggestion = engine.categorize_document(document)
 
     assert suggestion.status == "success"
+    assert suggestion.suggested_content == "Extracted text from attachment"
     assert captured["ocr_content"] == ""
     assert captured["attachment"] == paperless.attachment
+    assert not attachment_path.exists()
+
+
+def test_engine_returns_error_for_empty_ocr_when_attachment_yields_no_content(tmp_path):
+    attachment_path = tmp_path / "source.pdf"
+    attachment_path.write_bytes(b"%PDF")
+
+    paperless = StubPaperless()
+    paperless.attachment = DocumentAttachment(
+        path=str(attachment_path),
+        source="archived",
+        mime_type="application/pdf",
+        filename="source.pdf",
+    )
+    engine = CategorizationEngine(
+        agent=StubAgent(
+            AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Attachment only",
+                    content=None,
+                    document_type_id=10,
+                    tag_ids=[2],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+        )
+    )
+    engine.paperless = paperless
+    engine._tags = engine.paperless.list_tags()
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+    document = _make_document()
+    document.content = ""
+
+    suggestion = engine.categorize_document(document)
+
+    assert suggestion.status == "error"
+    assert suggestion.error_message == "Document attachment did not provide usable OCR content"
     assert not attachment_path.exists()
 
 

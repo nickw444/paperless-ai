@@ -3,6 +3,7 @@
 import re
 import tempfile
 import time
+from collections.abc import Iterable
 from typing import Any
 from urllib.parse import unquote
 
@@ -219,19 +220,28 @@ class PaperlessClient:
         except Exception:
             return False
 
-    def list_inbox_documents(self, exclude_tag_id: int | None = None) -> list[Document]:
+    def list_inbox_documents(
+        self,
+        exclude_tag_id: int | None = None,
+        exclude_tag_ids: Iterable[int] | None = None,
+    ) -> list[Document]:
         """
         List all documents in the inbox.
 
         Args:
-            exclude_tag_id: Optional tag ID to exclude from results
+            exclude_tag_id: Optional tag ID to exclude from results.
+            exclude_tag_ids: Optional tag IDs to exclude from results.
         """
         results = self._get_all_pages("/api/documents/", params={"is_in_inbox": "true"})
         documents = [Document(**doc) for doc in results]
 
-        # Filter out documents with the excluded tag if specified
+        excluded_tag_ids = set(exclude_tag_ids or [])
         if exclude_tag_id is not None:
-            documents = [doc for doc in documents if exclude_tag_id not in doc.tags]
+            excluded_tag_ids.add(exclude_tag_id)
+
+        # Filter out documents with any excluded tag if specified.
+        if excluded_tag_ids:
+            documents = [doc for doc in documents if excluded_tag_ids.isdisjoint(doc.tags)]
 
         return documents
 
