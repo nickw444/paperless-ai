@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from config.settings import settings
 from llm.schemas import (
     AgentCategorizationResult,
     AvailableOptions,
@@ -22,14 +23,25 @@ from paperless.models import (
     Tag,
 )
 
+ENGINE_MANAGED_TAG_NAMES = {"paperless-ai-parsed", "paperless-ai-failed"}
+
 
 class CategorizationEngine:
     """Engine for categorizing documents using the Codex agent and Paperless metadata."""
 
-    def __init__(self, agent: DocumentCategorizer):
+    def __init__(
+        self,
+        agent: DocumentCategorizer,
+        protected_tag_names: list[str] | None = None,
+    ):
         """Initialize the categorization engine."""
         self.paperless = PaperlessClient()
         self.agent = agent
+        self.protected_tag_names = (
+            protected_tag_names
+            if protected_tag_names is not None
+            else settings.parsed_protected_tags
+        )
         self._tags: list[Tag] | None = None
         self._correspondents: list[Correspondent] | None = None
         self._document_types: list[DocumentType] | None = None
@@ -51,12 +63,25 @@ class CategorizationEngine:
         if self._storage_paths is None:
             self._storage_paths = self.paperless.list_storage_paths()
 
-    def _get_inbox_tag_id(self) -> int | None:
-        """Get the ID of the inbox tag, if it exists."""
+    def _get_protected_tag_ids(self) -> list[int]:
+        """Get IDs for configured protected tags that exist in Paperless."""
+        protected_names = {name.lower() for name in self.protected_tag_names}
+        if not protected_names:
+            return []
+
+        protected_ids = []
         for tag in self._tags:
-            if tag.is_inbox_tag:
-                return tag.id
-        return None
+            if tag.name.lower() in protected_names:
+                protected_ids.append(tag.id)
+        return protected_ids
+
+    def _get_engine_managed_tag_ids(self) -> list[int]:
+        """Get IDs for lifecycle tags managed by paperless-ai itself."""
+        managed_ids = []
+        for tag in self._tags:
+            if tag.name.lower() in ENGINE_MANAGED_TAG_NAMES:
+                managed_ids.append(tag.id)
+        return managed_ids
 
     def get_or_create_parsed_tag(self) -> int:
         """Get or create the 'paperless-ai-parsed' tag and return its ID."""
@@ -83,9 +108,11 @@ class CategorizationEngine:
             CategorizationSuggestion with the analysis results
 
         Note:
-            The Inbox tag is ALWAYS preserved if present on the document.
-            It will not be passed to the agent and will be automatically included
-            in suggested_tag_ids, allowing manual review and de-inbox workflow.
+            Protected tags configured in settings are ALWAYS preserved if present on the
+            document. They will not be passed as available tag options to the agent and
+            will be automatically included in suggested_tag_ids. Lifecycle tags managed by
+            paperless-ai itself are omitted from the agent context and applied only by the
+            engine.
         """
         # Load metadata if not already loaded
         self._load_metadata()
@@ -116,10 +143,17 @@ class CategorizationEngine:
             )
 
         pending_new_correspondents = list(self.new_entities_found["correspondents"].keys())
+        protected_tag_ids = self._get_protected_tag_ids()
+        engine_managed_tag_ids = self._get_engine_managed_tag_ids()
+        omitted_tag_ids = set(protected_tag_ids) | set(engine_managed_tag_ids)
 
         available_options = AvailableOptions(
             document_types=[EntityOption(id=t.id, name=t.name) for t in self._document_types],
-            tags=[EntityOption(id=t.id, name=t.name) for t in self._tags if not t.is_inbox_tag],
+            tags=[
+                EntityOption(id=t.id, name=t.name)
+                for t in self._tags
+                if t.id not in omitted_tag_ids
+            ],
             correspondents=merge_correspondent_options(
                 [EntityOption(id=c.id, name=c.name) for c in self._correspondents],
                 pending_new_correspondents,
@@ -130,7 +164,9 @@ class CategorizationEngine:
         current_metadata = CurrentMetadata(
             title=document.title,
             document_type=self._to_entity_option(document.document_type, self._document_types),
-            tags=self._get_tag_options(document.tags),
+            tags=self._get_tag_options(
+                [tag_id for tag_id in document.tags if tag_id not in engine_managed_tag_ids]
+            ),
             correspondent=self._to_entity_option(document.correspondent, self._correspondents),
             storage_path=self._to_entity_option(document.storage_path, self._storage_paths),
         )
@@ -175,11 +211,13 @@ class CategorizationEngine:
 
         suggested_type_id = output.document_type_id
         suggested_type_name = self._get_type_name(suggested_type_id)
-        suggested_tag_ids = list(output.tag_ids)
+        suggested_tag_ids = [
+            tag_id for tag_id in output.tag_ids if tag_id not in engine_managed_tag_ids
+        ]
 
-        inbox_tag_id = self._get_inbox_tag_id()
-        if inbox_tag_id and inbox_tag_id in document.tags and inbox_tag_id not in suggested_tag_ids:
-            suggested_tag_ids.append(inbox_tag_id)
+        for protected_tag_id in protected_tag_ids:
+            if protected_tag_id in document.tags and protected_tag_id not in suggested_tag_ids:
+                suggested_tag_ids.append(protected_tag_id)
 
         if set(document.tags) == set(suggested_tag_ids):
             suggested_tag_ids = list(document.tags)

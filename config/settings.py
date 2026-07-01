@@ -38,6 +38,10 @@ class Settings(BaseSettings):
         default="application/pdf,image/jpeg,image/png",
         description="MIME types that can be supplied as document attachments",
     )
+    protected_tags: str = Field(
+        default="Inbox",
+        description="Comma-separated tag names that should never be removed from documents",
+    )
 
     @field_validator("paperless_url")
     @classmethod
@@ -53,6 +57,11 @@ class Settings(BaseSettings):
             for item in self.supported_attachment_mime_types.split(",")
             if item.strip()
         ]
+
+    @property
+    def parsed_protected_tags(self) -> list[str]:
+        """Return protected tag names as a normalized list."""
+        return [item.strip() for item in self.protected_tags.split(",") if item.strip()]
 
 
 def load_settings() -> Settings:
@@ -95,6 +104,10 @@ def load_settings() -> Settings:
         print(
             "  - SUPPORTED_ATTACHMENT_MIME_TYPES: Comma-separated MIME types "
             "(default: application/pdf,image/jpeg,image/png)",
+            file=sys.stderr,
+        )
+        print(
+            '  - PROTECTED_TAGS: Comma-separated tag names to never remove (default: "Inbox")',
             file=sys.stderr,
         )
         sys.exit(1)

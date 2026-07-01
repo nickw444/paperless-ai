@@ -57,6 +57,9 @@ CODEX_REASONING_EFFORT=minimal
 ENABLE_DOCUMENT_ATTACHMENTS=true
 MAX_ATTACHMENT_BYTES=20000000
 SUPPORTED_ATTACHMENT_MIME_TYPES=application/pdf,image/jpeg,image/png
+
+# Protected tags
+PROTECTED_TAGS=Inbox,From Email,Tax Deduction
 ```
 
 ### CLI version requirements
@@ -112,7 +115,8 @@ python main.py analyze --export suggestions.json
 - **LLM OCR content**: Optionally applies Codex-produced replacement document content
 - **Batch processing**: Process documents incrementally with `--limit`
 - **Incremental workflow**: Already-processed documents are automatically excluded
-- **Inbox preservation**: Keeps inbox tags for manual review workflows
+- **Protected tag preservation**: Keeps configured protected tags for manual review workflows
+- **Lifecycle tag ownership**: Omits `paperless-ai-parsed` and `paperless-ai-failed` from agent choices
 - **JSON export**: Save suggestions for later review or automation
 - **Debug mode**: Print raw agent prompts, responses, and available token/cost metadata
 - **Document attachments**: Adds supported PDF/JPEG/PNG document files alongside OCR context where available

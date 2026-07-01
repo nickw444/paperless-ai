@@ -144,6 +144,162 @@ def test_engine_preserves_tag_order_when_tag_set_unchanged():
     assert suggestion.suggested_tags == ["Inbox", "financial", "From Email"]
 
 
+def test_engine_preserves_configured_protected_tags():
+    agent = StubAgent(
+        AgentCategorizationResult(
+            output=CategorizationAgentOutput(
+                title="Invoice - Acme",
+                document_type_id=10,
+                tag_ids=[2],
+                correspondent_id=None,
+                new_correspondent_name=None,
+                storage_path_id=None,
+            )
+        )
+    )
+    engine = CategorizationEngine(agent=agent, protected_tag_names=["Inbox", "From Email"])
+    engine.paperless = StubPaperless()
+    engine._tags = [
+        Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
+        Tag(id=2, name="financial", slug="financial"),
+        Tag(id=3, name="From Email", slug="from-email"),
+    ]
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    document = _make_document()
+    document.tags = [1, 3]
+
+    suggestion = engine.categorize_document(document)
+
+    assert suggestion.suggested_tag_ids == [2, 1, 3]
+    assert suggestion.suggested_tags == ["financial", "Inbox", "From Email"]
+
+
+def test_engine_excludes_configured_protected_tags_from_agent_options():
+    captured: dict[str, AvailableOptions] = {}
+
+    class CapturingAgent(StubAgent):
+        def categorize_document(
+            self,
+            ocr_content: str,
+            available_options: AvailableOptions,
+            current_metadata: CurrentMetadata,
+            attachment: DocumentAttachment | None = None,
+        ):
+            del ocr_content, current_metadata, attachment
+            captured["options"] = available_options
+            return AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Invoice",
+                    document_type_id=10,
+                    tag_ids=[2],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+
+    engine = CategorizationEngine(
+        agent=CapturingAgent(AgentCategorizationResult()),
+        protected_tag_names=["Inbox", "From Email"],
+    )
+    engine.paperless = StubPaperless()
+    engine._tags = [
+        Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
+        Tag(id=2, name="financial", slug="financial"),
+        Tag(id=3, name="From Email", slug="from-email"),
+    ]
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    engine.categorize_document(_make_document())
+
+    assert captured["options"].tags == [EntityOption(id=2, name="financial")]
+
+
+def test_engine_excludes_lifecycle_tags_from_agent_options_and_current_metadata():
+    captured: dict[str, AvailableOptions | CurrentMetadata] = {}
+
+    class CapturingAgent(StubAgent):
+        def categorize_document(
+            self,
+            ocr_content: str,
+            available_options: AvailableOptions,
+            current_metadata: CurrentMetadata,
+            attachment: DocumentAttachment | None = None,
+        ):
+            del ocr_content, attachment
+            captured["options"] = available_options
+            captured["metadata"] = current_metadata
+            return AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Invoice",
+                    document_type_id=10,
+                    tag_ids=[2],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+
+    engine = CategorizationEngine(agent=CapturingAgent(AgentCategorizationResult()))
+    engine.paperless = StubPaperless()
+    engine._tags = [
+        Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
+        Tag(id=2, name="financial", slug="financial"),
+        Tag(id=3, name="paperless-ai-parsed", slug="paperless-ai-parsed"),
+        Tag(id=4, name="paperless-ai-failed", slug="paperless-ai-failed"),
+    ]
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    document = _make_document()
+    document.tags = [1, 2, 3, 4]
+
+    engine.categorize_document(document)
+
+    assert captured["options"].tags == [EntityOption(id=2, name="financial")]
+    assert captured["metadata"].tags == [
+        EntityOption(id=1, name="Inbox"),
+        EntityOption(id=2, name="financial"),
+    ]
+
+
+def test_engine_removes_lifecycle_tags_from_agent_suggestions():
+    agent = StubAgent(
+        AgentCategorizationResult(
+            output=CategorizationAgentOutput(
+                title="Invoice - Acme",
+                document_type_id=10,
+                tag_ids=[2, 3, 4],
+                correspondent_id=None,
+                new_correspondent_name=None,
+                storage_path_id=None,
+            )
+        )
+    )
+    engine = CategorizationEngine(agent=agent)
+    engine.paperless = StubPaperless()
+    engine._tags = [
+        Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
+        Tag(id=2, name="financial", slug="financial"),
+        Tag(id=3, name="paperless-ai-parsed", slug="paperless-ai-parsed"),
+        Tag(id=4, name="paperless-ai-failed", slug="paperless-ai-failed"),
+    ]
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    suggestion = engine.categorize_document(_make_document())
+
+    assert suggestion.suggested_tag_ids == [2, 1]
+    assert suggestion.suggested_tags == ["financial", "Inbox"]
+
+
 def test_engine_maps_pending_correspondent_id_to_new_suggestion():
     agent = StubAgent(
         AgentCategorizationResult(
