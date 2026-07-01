@@ -44,6 +44,10 @@ CORRESPONDENT MATCHING:
 SEMANTIC TAG MATCHING:
 - Tags should reflect what the document IS ABOUT, not keywords that merely appear in it
 - Utility bill for 123 Main St → tag that property; payslip mentioning an address → do not
+- Receipt for charitable donation → tag Tax Deduction
+- Home office expense receipt → tag Tax Deduction
+- Bill, invoice, or receipt labeled "Tax Invoice" → do not tag Tax or Tax Deduction solely
+  because of that label
 - Ask: "Is this document primarily ABOUT [tag concept]?" If no, do not include the tag
 
 DOCUMENT TYPE AND STORAGE PATH:
