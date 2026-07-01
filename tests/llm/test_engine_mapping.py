@@ -559,6 +559,52 @@ def test_engine_calls_agent_for_empty_ocr_when_attachment_exists(tmp_path):
     assert not attachment_path.exists()
 
 
+def test_engine_accepts_photo_description_for_empty_ocr(tmp_path):
+    attachment_path = tmp_path / "photo.jpg"
+    attachment_path.write_bytes(b"JPEG")
+
+    paperless = StubPaperless()
+    paperless.attachment = DocumentAttachment(
+        path=str(attachment_path),
+        source="original",
+        mime_type="image/jpeg",
+        filename="IMG_1234.jpg",
+    )
+    engine = CategorizationEngine(
+        agent=StubAgent(
+            AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Photo - Kitchen Renovation Progress",
+                    content=(
+                        "Photo showing a partially renovated kitchen with exposed cabinets, "
+                        "tools on the countertop, and no clearly readable document text."
+                    ),
+                    document_type_id=None,
+                    tag_ids=[],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+        )
+    )
+    engine.paperless = paperless
+    engine._tags = engine.paperless.list_tags()
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+    document = _make_document()
+    document.content = ""
+    document.title = "IMG_1234.jpg"
+
+    suggestion = engine.categorize_document(document)
+
+    assert suggestion.status == "success"
+    assert suggestion.suggested_title == "Photo - Kitchen Renovation Progress"
+    assert suggestion.suggested_content.startswith("Photo showing")
+    assert not attachment_path.exists()
+
+
 def test_engine_returns_error_for_empty_ocr_when_attachment_yields_no_content(tmp_path):
     attachment_path = tmp_path / "source.pdf"
     attachment_path.write_bytes(b"%PDF")
@@ -596,7 +642,7 @@ def test_engine_returns_error_for_empty_ocr_when_attachment_yields_no_content(tm
     suggestion = engine.categorize_document(document)
 
     assert suggestion.status == "error"
-    assert suggestion.error_message == "Document attachment did not provide usable OCR content"
+    assert suggestion.error_message == "Document attachment did not provide usable content"
     assert not attachment_path.exists()
 
 

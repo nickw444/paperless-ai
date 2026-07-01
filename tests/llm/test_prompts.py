@@ -39,6 +39,8 @@ def test_build_categorization_prompt_puts_instructions_before_data():
     assert '"tags":[{"id":1,"name":"Inbox"}]' in prompt
     assert "Set content to corrected document OCR text" in prompt
     assert "Do not summarize" in prompt
+    assert "photo or image without clear document text" in prompt
+    assert "factual description of what is visible" in prompt
 
 
 def test_build_categorization_prompt_includes_attachment_block():
@@ -62,6 +64,26 @@ def test_build_categorization_prompt_includes_attachment_block():
     assert "@/tmp/source.pdf" in prompt
     assert "mime_type: application/pdf" in prompt
     assert "filename: source.pdf" in prompt
+
+
+def test_build_categorization_prompt_tells_agent_to_describe_textless_photos():
+    prompt = build_categorization_prompt(
+        content="",
+        available_options=AvailableOptions(),
+        current_metadata=_sample_current_metadata(),
+        attachment=DocumentAttachment(
+            path="/tmp/photo.jpg",
+            source="original",
+            mime_type="image/jpeg",
+            filename="IMG_1234.jpg",
+            byte_size=456,
+        ),
+    )
+
+    assert "extract usable text from the attachment" in prompt
+    assert "set content to a concise" in prompt
+    assert "augment generic titles" in prompt
+    assert "mime_type: image/jpeg" in prompt
 
 
 def test_format_current_metadata_json_is_compact():

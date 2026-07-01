@@ -13,15 +13,20 @@ Never return entity names for existing items.
 
 Based on the document content, current_metadata, and available_options:
 1. Suggest an appropriate title (concise, descriptive). Use current_metadata.title as context:
-   keep descriptive manual titles; improve generic filenames (e.g. scan.pdf) using OCR content.
+   keep descriptive manual titles; improve generic filenames (e.g. scan.pdf) using OCR content,
+   extracted attachment text, or a visual description for photos without clear text.
 2. Set content to corrected document OCR text suitable for Paperless-ngx's content field.
    Preserve the document's reading order and meaningful structure such as headings, labels,
    tables, line breaks, checkboxes, and form sections. Correct obvious OCR errors only when
    the intended text is clear from context. Do not summarize, add commentary, invent missing
    values, or omit boilerplate text just because it is repetitive. When ocr_content is empty
    but a document_attachment is provided, extract usable text from the attachment into content.
+   If the attachment is a photo or image without clear document text, set content to a concise,
+   factual description of what is visible instead of returning null. Include visible subjects,
+   setting, notable objects, and any readable text. In this photo case, augment generic titles
+   with the main visible subject or scene.
    Return null only when the provided OCR content is already accurate enough or there is not
-   enough evidence to improve or extract it.
+   enough evidence to improve, extract, or describe it.
 3. Set document_type_id to the best matching id from available_options.document_types,
    or null. When current_metadata.document_type is set and still appropriate, return its id;
    change only when OCR or attachment context supports a better match.

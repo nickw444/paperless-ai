@@ -237,7 +237,7 @@ class CategorizationEngine:
                 current_storage_path=document.storage_path,
                 current_storage_path_name=current_storage_path_name,
                 status="error",
-                error_message="Document attachment did not provide usable OCR content",
+                error_message="Document attachment did not provide usable content",
             )
 
         new_correspondent_name = output.new_correspondent_name
