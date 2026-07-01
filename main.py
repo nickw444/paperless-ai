@@ -88,8 +88,14 @@ def list_inbox(output):
 @click.option("--limit", type=int, help="Process only first N documents")
 @click.option("--export", type=click.Path(), help="Export suggestions to file (JSON)")
 @click.option("--apply", is_flag=True, help="Apply changes after review")
+@click.option(
+    "--yes",
+    "-y",
+    is_flag=True,
+    help="Automatically confirm apply-time prompts",
+)
 @click.option("--debug", is_flag=True, help="Print agent inputs and outputs for inspection")
-def analyze(doc_id, output, limit, export, apply, debug):
+def analyze(doc_id, output, limit, export, apply, yes, debug):
     """Analyze inbox documents and suggest categorizations."""
     try:
         agent = CodexAgent(debug=debug)
@@ -152,7 +158,7 @@ def analyze(doc_id, output, limit, export, apply, debug):
             _show_new_entities_review(engine.new_entities_found)
 
             if apply:
-                if click.confirm("\nCreate these new correspondents in Paperless?"):
+                if _confirm_or_yes("\nCreate these new correspondents in Paperless?", yes=yes):
                     created = _create_new_entities(engine, engine.new_entities_found)
                     console.print(
                         f"[green]✓[/green] Created {created['correspondents']} new correspondent(s)"
@@ -161,8 +167,9 @@ def analyze(doc_id, output, limit, export, apply, debug):
                     # Re-run categorization ONLY for documents with NEW correspondents
                     if engine.documents_with_new_entities:
                         count = len(engine.documents_with_new_entities)
-                        if click.confirm(
-                            f"\nRe-categorize {count} documents that had new correspondents?"
+                        if _confirm_or_yes(
+                            f"\nRe-categorize {count} documents that had new correspondents?",
+                            yes=yes,
                         ):
                             docs_to_reprocess = [
                                 doc
@@ -197,7 +204,7 @@ def analyze(doc_id, output, limit, export, apply, debug):
 
         # Apply changes if requested
         if apply and suggestions:
-            if click.confirm("\nApply categorization suggestions to documents?"):
+            if _confirm_or_yes("\nApply categorization suggestions to documents?", yes=yes):
                 _apply_suggestions(engine, suggestions)
 
     except Exception as e:
@@ -206,6 +213,13 @@ def analyze(doc_id, output, limit, export, apply, debug):
 
         traceback.print_exc()
         sys.exit(1)
+
+
+def _confirm_or_yes(prompt: str, *, yes: bool, confirm=click.confirm) -> bool:
+    """Return True for --yes, otherwise ask the user for confirmation."""
+    if yes:
+        return True
+    return confirm(prompt)
 
 
 def _apply_suggestions(engine, suggestions):
