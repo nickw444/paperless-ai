@@ -42,6 +42,22 @@ class Settings(BaseSettings):
         default="Inbox",
         description="Comma-separated tag names that should never be removed from documents",
     )
+    paperless_ai_processing_version: str = Field(
+        default="1",
+        description="User-defined paperless-ai processing version for backfill detection",
+    )
+    paperless_ai_version_field_name: str = Field(
+        default="paperless-ai-version",
+        description="Paperless custom field name for the paperless-ai processing version",
+    )
+    paperless_ai_model_field_name: str = Field(
+        default="paperless-ai-model",
+        description="Paperless custom field name for the model used by paperless-ai",
+    )
+    paperless_ai_tokens_field_name: str = Field(
+        default="paperless-ai-tokens",
+        description="Paperless custom field name for token metadata written as JSON",
+    )
 
     @field_validator("paperless_url")
     @classmethod
@@ -108,6 +124,24 @@ def load_settings() -> Settings:
         )
         print(
             '  - PROTECTED_TAGS: Comma-separated tag names to never remove (default: "Inbox")',
+            file=sys.stderr,
+        )
+        print(
+            '  - PAPERLESS_AI_PROCESSING_VERSION: User-defined processing version (default: "1")',
+            file=sys.stderr,
+        )
+        print(
+            "  - PAPERLESS_AI_VERSION_FIELD_NAME: Custom field name "
+            '(default: "paperless-ai-version")',
+            file=sys.stderr,
+        )
+        print(
+            '  - PAPERLESS_AI_MODEL_FIELD_NAME: Custom field name (default: "paperless-ai-model")',
+            file=sys.stderr,
+        )
+        print(
+            "  - PAPERLESS_AI_TOKENS_FIELD_NAME: Custom field name "
+            '(default: "paperless-ai-tokens")',
             file=sys.stderr,
         )
         sys.exit(1)

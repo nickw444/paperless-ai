@@ -60,6 +60,12 @@ SUPPORTED_ATTACHMENT_MIME_TYPES=application/pdf,image/jpeg,image/png
 
 # Protected tags
 PROTECTED_TAGS=Inbox,From Email,Tax Deduction
+
+# Processing metadata custom fields
+PAPERLESS_AI_PROCESSING_VERSION=1
+PAPERLESS_AI_VERSION_FIELD_NAME=paperless-ai-version
+PAPERLESS_AI_MODEL_FIELD_NAME=paperless-ai-model
+PAPERLESS_AI_TOKENS_FIELD_NAME=paperless-ai-tokens
 ```
 
 ### CLI version requirements
@@ -98,6 +104,16 @@ Analyze a specific document:
 python main.py analyze --id 123
 ```
 
+Reprocess inbox documents whose stored paperless-ai version is stale:
+```bash
+python main.py analyze --reprocess-stale --apply
+```
+
+Reprocess all inbox documents, including documents already marked parsed:
+```bash
+python main.py analyze --reprocess-all --apply
+```
+
 Inspect raw agent input and output:
 ```bash
 python main.py analyze --id 123 --debug
@@ -115,6 +131,8 @@ python main.py analyze --export suggestions.json
 - **LLM OCR content**: Optionally applies Codex-produced replacement document content
 - **Batch processing**: Process documents incrementally with `--limit`
 - **Incremental workflow**: Already-processed documents are automatically excluded
+- **Backfill workflow**: Reprocess stale or all parsed inbox documents with explicit flags
+- **Processing metadata**: Writes model, processing version, and token JSON to Paperless custom fields
 - **Protected tag preservation**: Keeps configured protected tags for manual review workflows
 - **Lifecycle tag ownership**: Omits `paperless-ai-parsed` and `paperless-ai-failed` from agent choices
 - **JSON export**: Save suggestions for later review or automation

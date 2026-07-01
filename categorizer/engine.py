@@ -1,6 +1,8 @@
 """Categorization engine that orchestrates document analysis."""
 
+import json
 from pathlib import Path
+from typing import Any
 
 from config.settings import settings
 from llm.schemas import (
@@ -17,8 +19,10 @@ from paperless.client import PaperlessClient
 from paperless.models import (
     CategorizationSuggestion,
     Correspondent,
+    CustomField,
     Document,
     DocumentType,
+    ProcessingMetadata,
     StoragePath,
     Tag,
 )
@@ -48,6 +52,7 @@ class CategorizationEngine:
         self._correspondents: list[Correspondent] | None = None
         self._document_types: list[DocumentType] | None = None
         self._storage_paths: list[StoragePath] | None = None
+        self._custom_fields: list[CustomField] | None = None
         self.new_entities_found = {
             "correspondents": {},  # name -> list of doc_ids
         }
@@ -64,6 +69,11 @@ class CategorizationEngine:
             self._document_types = self.paperless.list_document_types()
         if self._storage_paths is None:
             self._storage_paths = self.paperless.list_storage_paths()
+
+    def _load_custom_fields(self) -> None:
+        """Load and cache custom fields from Paperless."""
+        if self._custom_fields is None:
+            self._custom_fields = self.paperless.list_custom_fields()
 
     def _get_protected_tag_ids(self) -> list[int]:
         """Get IDs for configured protected tags that exist in Paperless."""
@@ -120,6 +130,61 @@ class CategorizationEngine:
 
     def _is_tracking_tag(self, tag: Tag) -> bool:
         return tag.name.lower() in {PARSED_TAG_NAME, FAILED_TAG_NAME}
+
+    def get_or_create_processing_custom_fields(self) -> dict[str, int]:
+        """Return IDs for paperless-ai processing custom fields, creating missing ones."""
+        return self._processing_custom_field_ids(create=True)
+
+    def get_processing_version_custom_field_id(self) -> int | None:
+        """Return the processing version custom field ID if it exists."""
+        return self._processing_custom_field_ids(create=False).get("version")
+
+    def processing_metadata_for_result(
+        self,
+        result: AgentCategorizationResult,
+    ) -> ProcessingMetadata:
+        """Build custom-field metadata for a successful categorization result."""
+        usage = result.usage_metadata
+        model = usage.model if usage and usage.model else settings.codex_model
+        return ProcessingMetadata(
+            version=settings.paperless_ai_processing_version,
+            model=model,
+            tokens=_format_token_metadata_json(usage),
+        )
+
+    def processing_custom_field_values(
+        self,
+        metadata: ProcessingMetadata | None,
+    ) -> list[dict[str, int | str]]:
+        """Map processing metadata to Paperless custom field id/value payload."""
+        if metadata is None:
+            return []
+
+        field_ids = self.get_or_create_processing_custom_fields()
+        values = [
+            {"field": field_ids["version"], "value": metadata.version},
+        ]
+        if metadata.model:
+            values.append({"field": field_ids["model"], "value": metadata.model})
+        if metadata.tokens:
+            values.append({"field": field_ids["tokens"], "value": metadata.tokens})
+        return values
+
+    def is_document_processing_stale(
+        self,
+        document: Document,
+        version_field_id: int | None = None,
+    ) -> bool:
+        """Return whether a document's stored processing version differs from config."""
+        field_id = version_field_id
+        if field_id is None:
+            field_id = self.get_processing_version_custom_field_id()
+        if field_id is None:
+            return True
+        return (
+            _document_custom_field_value(document.custom_fields, field_id)
+            != settings.paperless_ai_processing_version
+        )
 
     def categorize_document(self, document: Document) -> CategorizationSuggestion:
         """
@@ -221,6 +286,7 @@ class CategorizationEngine:
                 current_storage_path_name=current_storage_path_name,
                 status="error",
                 error_message=result.error or "Agent returned no output",
+                processing_metadata=self.processing_metadata_for_result(result),
             )
 
         output = result.output
@@ -238,6 +304,7 @@ class CategorizationEngine:
                 current_storage_path_name=current_storage_path_name,
                 status="error",
                 error_message="Document attachment did not provide usable content",
+                processing_metadata=self.processing_metadata_for_result(result),
             )
 
         new_correspondent_name = output.new_correspondent_name
@@ -316,6 +383,7 @@ class CategorizationEngine:
             suggested_storage_path=suggested_storage_path_name,
             suggested_storage_path_id=suggested_storage_path_id,
             suggested_storage_path_is_new=False,
+            processing_metadata=self.processing_metadata_for_result(result),
             status="success",
         )
 
@@ -327,6 +395,41 @@ class CategorizationEngine:
             if correspondent.name.lower() == name_lower:
                 return correspondent.id
         return None
+
+    def _processing_custom_field_ids(self, *, create: bool) -> dict[str, int]:
+        self._load_custom_fields()
+        names = {
+            "version": settings.paperless_ai_version_field_name,
+            "model": settings.paperless_ai_model_field_name,
+            "tokens": settings.paperless_ai_tokens_field_name,
+        }
+        field_ids: dict[str, int] = {}
+        fields_by_name = {field.name.lower(): field for field in self._custom_fields}
+
+        for key, name in names.items():
+            field = fields_by_name.get(name.lower())
+            if field is None:
+                if not create:
+                    continue
+                created = False
+                try:
+                    field = self.paperless.create_custom_field(name, data_type="string")
+                    created = True
+                except ValueError as error:
+                    if "custom field with this name already exists" not in str(error).lower():
+                        raise
+                    self._custom_fields = None
+                    self._load_custom_fields()
+                    fields_by_name = {field.name.lower(): field for field in self._custom_fields}
+                    field = fields_by_name.get(name.lower())
+                    if field is None:
+                        raise
+                if created:
+                    self._custom_fields.append(field)
+                    fields_by_name[field.name.lower()] = field
+            field_ids[key] = field.id
+
+        return field_ids
 
     def resolve_suggestion_correspondent_id(self, suggestion) -> int | None:
         """Resolve a suggestion's correspondent to a real Paperless id for applying."""
@@ -417,3 +520,40 @@ class CategorizationEngine:
             if spath.id == storage_path_id:
                 return spath.name
         return None
+
+
+def _format_token_metadata_json(usage) -> str | None:
+    if usage is None:
+        return None
+
+    tokens: dict[str, int] = {}
+    if usage.total_tokens is not None:
+        tokens["total"] = usage.total_tokens
+    if usage.input_tokens is not None:
+        tokens["input"] = usage.input_tokens
+    if usage.output_tokens is not None:
+        tokens["output"] = usage.output_tokens
+
+    if not tokens:
+        return None
+    return json.dumps(tokens, separators=(",", ":"))
+
+
+def _document_custom_field_value(
+    custom_fields: list[dict[str, Any]] | dict[str, Any],
+    field_id: int,
+) -> Any:
+    """Extract a Paperless document custom field value from common API shapes."""
+    field_id_string = str(field_id)
+    if isinstance(custom_fields, dict):
+        return custom_fields.get(field_id_string, custom_fields.get(field_id))
+
+    for item in custom_fields:
+        item_field_id = item.get("field")
+        if isinstance(item_field_id, dict):
+            item_field_id = item_field_id.get("id")
+        if item_field_id is None:
+            item_field_id = item.get("id")
+        if str(item_field_id) == field_id_string:
+            return item.get("value")
+    return None

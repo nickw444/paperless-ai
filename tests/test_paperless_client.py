@@ -10,6 +10,8 @@ class CapturingPaperlessClient(PaperlessClient):
 
     def __init__(self):
         self.patch_calls: list[tuple[str, dict]] = []
+        self.post_calls: list[tuple[str, dict]] = []
+        self.page_results: dict[str, list[dict]] = {}
 
     def _patch(self, endpoint: str, data: dict) -> dict:
         self.patch_calls.append((endpoint, data))
@@ -27,6 +29,19 @@ class CapturingPaperlessClient(PaperlessClient):
             "added": datetime(2024, 1, 1).isoformat(),
             "original_file_name": "scan.pdf",
         }
+
+    def _post(self, endpoint: str, data: dict) -> dict:
+        self.post_calls.append((endpoint, data))
+        return {
+            "id": 99,
+            "name": data["name"],
+            "data_type": data["data_type"],
+            "extra_data": {},
+        }
+
+    def _get_all_pages(self, endpoint: str, params: dict | None = None) -> list[dict]:
+        del params
+        return self.page_results.get(endpoint, [])
 
 
 def test_update_document_includes_content_when_provided():
@@ -104,3 +119,49 @@ def test_list_inbox_documents_excludes_any_requested_tag():
     documents = client.list_inbox_documents(exclude_tag_ids=[20, 30])
 
     assert [document.id for document in documents] == [1]
+
+
+def test_update_document_includes_custom_fields_when_provided():
+    client = CapturingPaperlessClient()
+
+    client.update_document(
+        document_id=42,
+        title="Invoice",
+        custom_fields=[
+            {"field": 7, "value": "1"},
+            {"field": 8, "value": "gpt-5"},
+            {"field": 9, "value": '{"total":100}'},
+        ],
+    )
+
+    assert client.patch_calls == [
+        (
+            "/api/documents/42/",
+            {
+                "title": "Invoice",
+                "custom_fields": [
+                    {"field": 7, "value": "1"},
+                    {"field": 8, "value": "gpt-5"},
+                    {"field": 9, "value": '{"total":100}'},
+                ],
+            },
+        )
+    ]
+
+
+def test_list_and_create_custom_fields():
+    client = CapturingPaperlessClient()
+    client.page_results["/api/custom_fields/"] = [
+        {"id": 7, "name": "paperless-ai-version", "data_type": "string", "extra_data": None}
+    ]
+
+    fields = client.list_custom_fields()
+    created = client.create_custom_field("paperless-ai-model")
+
+    assert fields[0].id == 7
+    assert fields[0].name == "paperless-ai-version"
+    assert fields[0].extra_data == {}
+    assert client.post_calls == [
+        ("/api/custom_fields/", {"name": "paperless-ai-model", "data_type": "string"})
+    ]
+    assert created.name == "paperless-ai-model"

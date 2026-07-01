@@ -10,6 +10,7 @@ from llm.schemas import (
     CurrentMetadata,
     EntityOption,
 )
+from llm.usage import AgentUsageMetadata
 from paperless.models import Document, DocumentAttachment, DocumentType, Tag
 
 
@@ -627,7 +628,8 @@ def test_engine_returns_error_for_empty_ocr_when_attachment_yields_no_content(tm
                     correspondent_id=None,
                     new_correspondent_name=None,
                     storage_path_id=None,
-                )
+                ),
+                usage_metadata=AgentUsageMetadata(model="gpt-5-test", total_tokens=42),
             )
         )
     )
@@ -643,6 +645,9 @@ def test_engine_returns_error_for_empty_ocr_when_attachment_yields_no_content(tm
 
     assert suggestion.status == "error"
     assert suggestion.error_message == "Document attachment did not provide usable content"
+    assert suggestion.processing_metadata is not None
+    assert suggestion.processing_metadata.model == "gpt-5-test"
+    assert suggestion.processing_metadata.tokens == '{"total":42}'
     assert not attachment_path.exists()
 
 
@@ -660,3 +665,4 @@ def test_engine_returns_error_for_empty_ocr_without_attachment():
 
     assert suggestion.status == "error"
     assert suggestion.error_message == "Document has no OCR content or supported attachment"
+    assert suggestion.processing_metadata is None

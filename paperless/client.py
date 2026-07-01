@@ -14,6 +14,7 @@ from urllib3.util.retry import Retry
 from config.settings import settings
 from paperless.models import (
     Correspondent,
+    CustomField,
     Document,
     DocumentAttachment,
     DocumentType,
@@ -357,6 +358,11 @@ class PaperlessClient:
         results = self._get_all_pages("/api/storage_paths/")
         return [StoragePath(**spath) for spath in results]
 
+    def list_custom_fields(self) -> list[CustomField]:
+        """List all available custom fields."""
+        results = self._get_all_pages("/api/custom_fields/")
+        return [CustomField(**field) for field in results]
+
     def create_correspondent(self, name: str) -> Correspondent:
         """Create a new correspondent with ML matching enabled."""
         data = {
@@ -384,6 +390,12 @@ class PaperlessClient:
         result = self._post("/api/storage_paths/", data)
         return StoragePath(**result)
 
+    def create_custom_field(self, name: str, data_type: str = "string") -> CustomField:
+        """Create a new custom field."""
+        data = {"name": name, "data_type": data_type}
+        result = self._post("/api/custom_fields/", data)
+        return CustomField(**result)
+
     def update_document(
         self,
         document_id: int,
@@ -393,6 +405,7 @@ class PaperlessClient:
         document_type: int | None = None,
         storage_path: int | None = None,
         tags: list[int] | None = None,
+        custom_fields: list[dict[str, Any]] | None = None,
     ) -> Document:
         """Update a document's metadata."""
         data = {}
@@ -408,6 +421,8 @@ class PaperlessClient:
             data["storage_path"] = storage_path
         if tags is not None:
             data["tags"] = tags
+        if custom_fields is not None:
+            data["custom_fields"] = custom_fields
 
         result = self._patch(f"/api/documents/{document_id}/", data)
         return Document(**result)

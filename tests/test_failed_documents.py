@@ -34,6 +34,10 @@ class FailedTagEngine:
         del suggestion
         return False
 
+    def processing_custom_field_values(self, metadata):
+        del metadata
+        return []
+
 
 def test_apply_suggestions_tags_error_documents_as_failed():
     engine = FailedTagEngine()

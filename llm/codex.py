@@ -127,6 +127,7 @@ class CodexAgent:
                 return AgentCategorizationResult(
                     output=output,
                     raw_response=last_raw_response,
+                    usage_metadata=trace.usage_metadata,
                     debug_traces=debug_traces,
                 )
             except subprocess.TimeoutExpired:

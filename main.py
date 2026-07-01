@@ -95,9 +95,22 @@ def list_inbox(output):
     help="Automatically confirm apply-time prompts",
 )
 @click.option("--debug", is_flag=True, help="Print agent inputs and outputs for inspection")
-def analyze(doc_id, output, limit, export, apply, yes, debug):
+@click.option(
+    "--reprocess-stale",
+    is_flag=True,
+    help="Include parsed inbox documents whose paperless-ai version differs from config",
+)
+@click.option(
+    "--reprocess-all",
+    is_flag=True,
+    help="Include all inbox documents, even if already parsed",
+)
+def analyze(doc_id, output, limit, export, apply, yes, debug, reprocess_stale, reprocess_all):
     """Analyze inbox documents and suggest categorizations."""
     try:
+        if reprocess_stale and reprocess_all:
+            raise click.UsageError("--reprocess-stale and --reprocess-all cannot be used together")
+
         agent = CodexAgent(debug=debug)
         engine = CategorizationEngine(agent=agent)
         client = engine.paperless
@@ -106,18 +119,34 @@ def analyze(doc_id, output, limit, export, apply, yes, debug):
         if doc_id:
             documents = [client.get_document(doc_id)]
         else:
-            # Exclude already-tracked documents (only when not analyzing a specific doc).
+            # Exclude already-tracked documents unless explicitly reprocessing.
             excluded_tag_ids = []
+            parsed_tag_id = None
             try:
                 # Check if tracking tags exist, but don't create them yet.
                 for tag_name in (PARSED_TAG_NAME, FAILED_TAG_NAME):
                     tag_id = engine.get_tag_id_by_name(tag_name)
                     if tag_id is not None:
-                        excluded_tag_ids.append(tag_id)
+                        if tag_name == PARSED_TAG_NAME:
+                            parsed_tag_id = tag_id
+                        if not (reprocess_stale or reprocess_all):
+                            excluded_tag_ids.append(tag_id)
             except Exception:
                 pass  # If we can't check, continue without filtering
 
             documents = client.list_inbox_documents(exclude_tag_ids=excluded_tag_ids)
+            if reprocess_stale:
+                version_field_id = engine.get_processing_version_custom_field_id()
+                documents = [
+                    doc
+                    for doc in documents
+                    if _should_analyze_for_stale_reprocessing(
+                        engine,
+                        doc,
+                        parsed_tag_id,
+                        version_field_id,
+                    )
+                ]
             if limit:
                 documents = documents[:limit]
 
@@ -245,10 +274,16 @@ def _apply_suggestions(engine, suggestions):
                     tags.append(failed_tag_id)
 
                 try:
-                    engine.paperless.update_document(
-                        document_id=suggestion.document_id,
-                        tags=tags,
+                    update_kwargs = {
+                        "document_id": suggestion.document_id,
+                        "tags": tags,
+                    }
+                    custom_fields = engine.processing_custom_field_values(
+                        suggestion.processing_metadata
                     )
+                    if custom_fields:
+                        update_kwargs["custom_fields"] = custom_fields
+                    engine.paperless.update_document(**update_kwargs)
                     failed_tagged_count += 1
                 except Exception as e:
                     console.print(
@@ -284,6 +319,9 @@ def _apply_suggestions(engine, suggestions):
                     document_type=suggestion.suggested_type_id,
                     storage_path=suggestion.suggested_storage_path_id,
                     tags=tags,
+                    custom_fields=engine.processing_custom_field_values(
+                        suggestion.processing_metadata
+                    ),
                 )
                 applied_count += 1
             except Exception as e:
@@ -411,6 +449,25 @@ def _display_suggestion(suggestion):
     # Show warning if there are NEW correspondents
     if suggestion.suggested_correspondent_is_new:
         console.print("  [yellow]⚠️  New correspondent will be created if --apply is used[/yellow]")
+
+
+def _should_analyze_for_stale_reprocessing(
+    engine: CategorizationEngine,
+    document,
+    parsed_tag_id: int | None,
+    version_field_id: int | None,
+) -> bool:
+    """Return whether a document should be analyzed under --reprocess-stale."""
+    if parsed_tag_id is None or parsed_tag_id not in document.tags:
+        return True
+    return engine.is_document_processing_stale(document, version_field_id)
+
+
+def _exclude_documents_with_tag(documents, tag_id: int | None):
+    """Return documents excluding any document with the given tag id."""
+    if tag_id is None:
+        return documents
+    return [doc for doc in documents if tag_id not in doc.tags]
 
 
 if __name__ == "__main__":

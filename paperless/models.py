@@ -1,8 +1,9 @@
 """Data models for Paperless-ngx API responses."""
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Tag(BaseModel):
@@ -56,6 +57,30 @@ class StoragePath(BaseModel):
     document_count: int = 0
 
 
+class CustomField(BaseModel):
+    """Paperless custom field definition."""
+
+    id: int
+    name: str
+    data_type: str = "string"
+    extra_data: dict[str, Any] = Field(default_factory=dict)
+    document_count: int = 0
+
+    @field_validator("extra_data", mode="before")
+    @classmethod
+    def default_extra_data(cls, value):
+        """Paperless may return null for custom fields without extra data."""
+        return {} if value is None else value
+
+
+class ProcessingMetadata(BaseModel):
+    """paperless-ai processing metadata written to Paperless custom fields."""
+
+    version: str
+    model: str | None = None
+    tokens: str | None = None
+
+
 class Document(BaseModel):
     """Paperless document model."""
 
@@ -77,6 +102,7 @@ class Document(BaseModel):
     page_count: int | None = None
     owner: int | None = None
     user_can_change: bool = True
+    custom_fields: list[dict[str, Any]] | dict[str, Any] = Field(default_factory=list)
 
 
 class DocumentAttachment(BaseModel):
@@ -119,6 +145,7 @@ class CategorizationSuggestion(BaseModel):
     suggested_storage_path_is_new: bool = False
     status: str = "success"
     error_message: str | None = None
+    processing_metadata: ProcessingMetadata | None = None
 
 
 class PaginatedResponse(BaseModel):

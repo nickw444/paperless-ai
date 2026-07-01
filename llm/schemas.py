@@ -152,6 +152,7 @@ class AgentCategorizationResult(BaseModel):
     output: CategorizationAgentOutput | None = None
     raw_response: str = ""
     error: str | None = None
+    usage_metadata: AgentUsageMetadata | None = None
     debug_traces: list[AgentDebugTrace] = Field(default_factory=list)
 
 
