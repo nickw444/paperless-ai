@@ -14,13 +14,19 @@ Never return entity names for existing items.
 Based on the document content, current_metadata, and available_options:
 1. Suggest an appropriate title (concise, descriptive). Use current_metadata.title as context:
    keep descriptive manual titles; improve generic filenames (e.g. scan.pdf) using OCR content.
-2. Set document_type_id to the best matching id from available_options.document_types,
+2. Set content to corrected document OCR text suitable for Paperless-ngx's content field.
+   Preserve the document's reading order and meaningful structure such as headings, labels,
+   tables, line breaks, checkboxes, and form sections. Correct obvious OCR errors only when
+   the intended text is clear from context. Do not summarize, add commentary, invent missing
+   values, or omit boilerplate text just because it is repetitive. Return null only when the
+   provided OCR content is already accurate enough or there is not enough evidence to improve it.
+3. Set document_type_id to the best matching id from available_options.document_types,
    or null. When current_metadata.document_type is set and still appropriate, return its id;
    change only when OCR or attachment context supports a better match.
-3. Set tag_ids to relevant ids from available_options.tags (empty list if none apply).
+4. Set tag_ids to relevant ids from available_options.tags (empty list if none apply).
    Use current_metadata.tags as context; when the same tags still apply, return their ids;
    add or remove only when OCR or attachment context supports the change.
-4. Set correspondent_id to a matching id from available_options.correspondents, OR set
+5. Set correspondent_id to a matching id from available_options.correspondents, OR set
    new_correspondent_name when no listed correspondent fits (not both).
    When current_metadata.correspondent is set and still appropriate, return its id.
 
@@ -30,7 +36,7 @@ CORRESPONDENT MATCHING:
 - Only use new_correspondent_name when no correspondent in the list fits
 - Normalize new names: drop legal suffixes (Inc., LLC), URLs, and excess punctuation
 
-5. Set storage_path_id to the best matching id from available_options.storage_paths, or null.
+6. Set storage_path_id to the best matching id from available_options.storage_paths, or null.
    When current_metadata.storage_path is set and still appropriate, return its id.
 
 SEMANTIC TAG MATCHING:

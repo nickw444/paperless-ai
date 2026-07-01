@@ -37,6 +37,8 @@ def test_build_categorization_prompt_puts_instructions_before_data():
     assert '"document_types":[{"id":1,"name":"Bill"}]' in prompt
     assert '"title":"scan.pdf"' in prompt
     assert '"tags":[{"id":1,"name":"Inbox"}]' in prompt
+    assert "Set content to corrected document OCR text" in prompt
+    assert "Do not summarize" in prompt
 
 
 def test_build_categorization_prompt_includes_attachment_block():

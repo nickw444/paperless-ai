@@ -160,6 +160,7 @@ def test_categorize_document_runs_codex_subprocess_and_validates_output():
         captured["input"] = kwargs.get("input")
         payload = {
             "title": "Invoice - Acme",
+            "content": "Invoice\nAcme Corp\nTotal $100",
             "document_type_id": 10,
             "tag_ids": [2],
             "correspondent_id": 5,
@@ -185,6 +186,7 @@ def test_categorize_document_runs_codex_subprocess_and_validates_output():
     assert result.error is None
     assert result.output is not None
     assert result.output.title == "Invoice - Acme"
+    assert result.output.content == "Invoice\nAcme Corp\nTotal $100"
     assert result.output.document_type_id == 10
     assert result.output.tag_ids == [2]
     assert captured["command"][0] == "codex"

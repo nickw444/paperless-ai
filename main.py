@@ -244,6 +244,7 @@ def _apply_suggestions(engine, suggestions):
                 engine.paperless.update_document(
                     document_id=suggestion.document_id,
                     title=suggestion.suggested_title,
+                    content=suggestion.suggested_content,
                     correspondent=engine.resolve_suggestion_correspondent_id(suggestion),
                     document_type=suggestion.suggested_type_id,
                     storage_path=suggestion.suggested_storage_path_id,
@@ -317,6 +318,12 @@ def _display_suggestion(suggestion):
         console.print(f"  Title: [dim]{current_title}[/dim] -> [cyan]{suggested_title}[/cyan]")
     else:
         console.print(f"  Title: {current_title}")
+
+    if suggestion.suggested_content:
+        console.print(
+            f"  Content: [cyan]LLM OCR replacement suggested "
+            f"({len(suggestion.suggested_content):,} chars)[/cyan]"
+        )
 
     # Type
     current_type = suggestion.current_type_name or "None"

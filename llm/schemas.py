@@ -21,6 +21,7 @@ class CategorizationAgentOutput(BaseModel):
     """Validated categorization fields returned by the agent (ID-based)."""
 
     title: str
+    content: str | None = None
     document_type_id: int | None = None
     tag_ids: list[int] = Field(default_factory=list)
     correspondent_id: int | None = None
@@ -37,6 +38,8 @@ class CategorizationAgentOutput(BaseModel):
             if not stripped:
                 raise ValueError("new_correspondent_name cannot be empty")
             self.new_correspondent_name = stripped
+        if self.content is not None and not self.content.strip():
+            self.content = None
         return self
 
 
@@ -174,6 +177,7 @@ def build_categorization_json_schema() -> dict[str, Any]:
         "type": "object",
         "properties": {
             "title": {"type": "string"},
+            "content": {"type": ["string", "null"]},
             "document_type_id": {"type": ["integer", "null"]},
             "tag_ids": {"type": "array", "items": {"type": "integer"}},
             "correspondent_id": {"type": ["integer", "null"]},
@@ -182,6 +186,7 @@ def build_categorization_json_schema() -> dict[str, Any]:
         },
         "required": [
             "title",
+            "content",
             "document_type_id",
             "tag_ids",
             "correspondent_id",

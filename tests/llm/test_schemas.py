@@ -43,6 +43,7 @@ def test_build_categorization_json_schema_is_static_and_compact():
     assert schema_uses_forbidden_keywords(schema) is False
     assert "enum" not in json.dumps(schema)
 
+    assert schema["properties"]["content"] == {"type": ["string", "null"]}
     assert schema["properties"]["document_type_id"] == {"type": ["integer", "null"]}
     assert schema["properties"]["tag_ids"] == {
         "type": "array",
@@ -81,6 +82,7 @@ def test_validate_categorization_output_accepts_valid_payload():
         CategorizationAgentOutput.model_validate(
             {
                 "title": "Invoice - Acme - Jan 2024",
+                "content": "Invoice\nAcme\nTotal $42",
                 "document_type_id": 10,
                 "tag_ids": [2],
                 "correspondent_id": 5,
@@ -92,6 +94,7 @@ def test_validate_categorization_output_accepts_valid_payload():
     )
 
     assert output.title == "Invoice - Acme - Jan 2024"
+    assert output.content == "Invoice\nAcme\nTotal $42"
     assert output.document_type_id == 10
     assert output.tag_ids == [2]
 
@@ -211,6 +214,22 @@ def test_validate_agent_output_accepts_pending_correspondent_id():
 def test_validate_categorization_output_rejects_missing_title():
     with pytest.raises(ValidationError):
         CategorizationAgentOutput.model_validate({"tag_ids": []})
+
+
+def test_categorization_output_normalizes_blank_content_to_null():
+    output = CategorizationAgentOutput.model_validate(
+        {
+            "title": "Test",
+            "content": "   \n\t",
+            "document_type_id": None,
+            "tag_ids": [],
+            "correspondent_id": None,
+            "new_correspondent_name": None,
+            "storage_path_id": None,
+        }
+    )
+
+    assert output.content is None
 
 
 def test_current_metadata_defaults_optional_fields():

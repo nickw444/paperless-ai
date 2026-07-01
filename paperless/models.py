@@ -95,6 +95,7 @@ class CategorizationSuggestion(BaseModel):
     document_id: int
     current_title: str
     suggested_title: str | None = None
+    suggested_content: str | None = None
     current_type: int | None = None
     current_type_name: str | None = None
     suggested_type: str | None = None

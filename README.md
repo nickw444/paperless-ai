@@ -4,7 +4,7 @@ Automated document categorization for Paperless-ngx using the OpenAI Codex CLI.
 
 ## What it does
 
-paperless-ai analyzes documents in your Paperless-ngx inbox and suggests appropriate metadata (titles, tags, correspondents, document types, and storage paths). It uses the Codex CLI to read OCR content and, when possible, supported source document attachments for clearer context.
+paperless-ai analyzes documents in your Paperless-ngx inbox and suggests appropriate metadata (titles, tags, correspondents, document types, and storage paths). It can also ask Codex to produce improved document OCR content for Paperless. It uses the Codex CLI to read OCR content and, when possible, supported source document attachments for clearer context.
 
 By using the Codex CLI instead of a direct API, you can process documents using the subscriptions you already have (for example ChatGPT Plus) without paying per-token API costs. This makes it economical to categorize large batches of documents.
 
@@ -13,6 +13,7 @@ By using the Codex CLI instead of a direct API, you can process documents using 
 Manually categorizing documents in Paperless-ngx is time-consuming. This tool automates the process by:
 
 - Analyzing document content using the Codex CLI
+- Suggesting corrected OCR content for Paperless' document content field
 - Suggesting metadata based on your existing tags, correspondents, types, and storage paths
 - Learning your organizational patterns by matching against existing entities
 - Creating new correspondents when needed (with ML matching enabled)
@@ -23,7 +24,7 @@ Manually categorizing documents in Paperless-ngx is time-consuming. This tool au
 
 1. **Fetch documents**: Retrieves uncategorized documents from your Paperless-ngx inbox
 2. **Analyze content**: Sends OCR text, supported document attachments, and your available metadata options to Codex
-3. **Generate suggestions**: Codex returns JSON validated against a schema, preferring existing entities
+3. **Generate suggestions**: Codex returns JSON validated against a schema, preferring existing entities and optionally supplying corrected OCR content
 4. **Review**: Displays suggestions in a formatted table for your review
 5. **Apply changes**: Optionally updates documents in Paperless-ngx and tags them as processed
 
@@ -108,6 +109,7 @@ python main.py analyze --export suggestions.json
 
 - **Intelligent matching**: Codex tries to match existing entities before suggesting new ones
 - **Correspondent creation**: Suggests new correspondents when none match, with ML auto-matching enabled
+- **LLM OCR content**: Optionally applies Codex-produced replacement document content
 - **Batch processing**: Process documents incrementally with `--limit`
 - **Incremental workflow**: Already-processed documents are automatically excluded
 - **Inbox preservation**: Keeps inbox tags for manual review workflows

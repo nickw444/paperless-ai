@@ -72,6 +72,7 @@ def test_engine_maps_id_based_output_to_suggestion():
         AgentCategorizationResult(
             output=CategorizationAgentOutput(
                 title="Invoice - Acme",
+                content="Invoice\nAcme Corp\nTotal $100",
                 document_type_id=10,
                 tag_ids=[2],
                 correspondent_id=None,
@@ -91,6 +92,7 @@ def test_engine_maps_id_based_output_to_suggestion():
 
     assert suggestion.status == "success"
     assert suggestion.suggested_title == "Invoice - Acme"
+    assert suggestion.suggested_content == "Invoice\nAcme Corp\nTotal $100"
     assert suggestion.suggested_type == "Invoice"
     assert suggestion.suggested_type_id == 10
     assert suggestion.suggested_type_is_new is False

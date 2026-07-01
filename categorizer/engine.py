@@ -217,6 +217,7 @@ class CategorizationEngine:
             document_id=document.id,
             current_title=document.title,
             suggested_title=output.title,
+            suggested_content=output.content,
             current_type=document.document_type,
             current_type_name=current_type_name,
             suggested_type=suggested_type_name,
