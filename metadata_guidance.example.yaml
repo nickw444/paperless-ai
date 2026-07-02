@@ -1,0 +1,87 @@
+# Example metadata guidance for paperless-ai prompts.
+# Copy to metadata_guidance.yaml and customize for your Paperless instance.
+#
+# Only tags and document types listed here can be suggested by the agent.
+
+tags:
+  Tax Deduction:
+    use_when: >
+      Charitable donations, home office expenses, and other actual deductible costs
+      the document is primarily about.
+    avoid_when: >
+      Routine bills or invoices labeled "Tax Invoice", or documents that only mention
+      GST/VAT or tax amounts without being a deductible expense.
+
+  Tax:
+    use_when: >
+      Documents primarily about tax affairs (returns, assessments, tax authority correspondence).
+    avoid_when: >
+      Regular vendor bills labeled "Tax Invoice", or documents where tax is incidental.
+
+  "123 Main St":
+    use_when: >
+      Bills, strata notices, insurance, and utilities for 123 Main St when the document
+      is primarily about that property.
+    avoid_when: >
+      The address appears only incidentally (payslip, resume, unrelated correspondence).
+
+  "Unit 5":
+    use_when: >
+      Strata notices, bills, and correspondence primarily about Unit 5.
+    avoid_when: >
+      The unit number appears only in passing on unrelated documents.
+
+  Donation:
+    use_when: >
+      Receipts or acknowledgements for charitable donations.
+    avoid_when: >
+      General correspondence that merely mentions donating.
+
+  Utilities:
+    use_when: >
+      Utility bills (electricity, gas, water, internet) when the document is the bill itself.
+    avoid_when: >
+      Marketing material or correspondence that only mentions utilities in passing.
+
+  Insurance:
+    use_when: >
+      Policy documents, certificates, renewals, and claims primarily about insurance coverage.
+    avoid_when: >
+      Documents that only mention insurance incidentally.
+
+document_types:
+  Bill:
+    use_when: >
+      Documents requesting payment with an amount due, account number, or payment terms.
+    avoid_when: >
+      Proof of payment already made (use Receipt) or informational notices without a charge.
+
+  Receipt:
+    use_when: >
+      Proof that payment was made or goods/services were received and paid for.
+    avoid_when: >
+      Unpaid invoices or statements summarising account activity.
+
+  Statement:
+    use_when: >
+      Periodic account summaries covering multiple transactions or a date range.
+    avoid_when: >
+      A single charge or invoice for one amount (use Bill).
+
+  Notice:
+    use_when: >
+      Informational correspondence without a payment request.
+    avoid_when: >
+      Documents that are primarily a bill, receipt, or account statement.
+
+  Interest Rate Notice:
+    use_when: >
+      Lender or bank advising a change to loan, mortgage, or credit interest rate.
+    avoid_when: >
+      Utility tariffs, insurance premiums, or other non-interest pricing changes.
+
+  Report:
+    use_when: >
+      Formal reports, returns, or structured summaries.
+    avoid_when: >
+      Routine bills or correspondence.

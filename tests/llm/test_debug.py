@@ -10,7 +10,7 @@ from llm.schemas import (
     AttachmentDebugMetadata,
     AvailableOptions,
     CategorizationAgentOutput,
-    EntityOption,
+    GuidedEntityOption,
 )
 from llm.usage import AgentUsageMetadata
 
@@ -24,8 +24,8 @@ def test_print_agent_debug_traces_renders_prompt_and_raw_output():
         prepared_content_chars=120,
         ocr_preview="Invoice from Acme",
         available_options=AvailableOptions(
-            document_types=[EntityOption(id=10, name="Invoice")],
-            tags=[EntityOption(id=2, name="financial")],
+            document_types=[GuidedEntityOption(id=10, name="Invoice", use_when="Invoices")],
+            tags=[GuidedEntityOption(id=2, name="financial", use_when="Financial")],
         ),
         json_schema={"type": "object", "properties": {"title": {"type": "string"}}},
         command=["codex", "exec"],

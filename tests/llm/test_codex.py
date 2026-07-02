@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from llm.codex import CodexAgent, _read_structured_output
-from llm.schemas import AvailableOptions, CurrentMetadata, EntityOption
+from llm.schemas import AvailableOptions, CurrentMetadata, EntityOption, GuidedEntityOption
 from paperless.models import DocumentAttachment
 
 
@@ -140,8 +140,8 @@ def _make_agent(**overrides) -> CodexAgent:
 
 def _sample_options() -> AvailableOptions:
     return AvailableOptions(
-        document_types=[EntityOption(id=10, name="Invoice")],
-        tags=[EntityOption(id=2, name="financial")],
+        document_types=[GuidedEntityOption(id=10, name="Invoice", use_when="Invoices")],
+        tags=[GuidedEntityOption(id=2, name="financial", use_when="Financial")],
         correspondents=[EntityOption(id=5, name="Acme Corp")],
     )
 

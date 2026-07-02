@@ -18,6 +18,15 @@ class EntityOption(BaseModel):
     name: str
 
 
+class GuidedEntityOption(BaseModel):
+    """A selectable tag or document type with embedded usage guidance."""
+
+    id: int
+    name: str
+    use_when: str | None = None
+    avoid_when: str | None = None
+
+
 class CategorizationAgentOutput(BaseModel):
     """Validated categorization fields returned by the agent (ID-based)."""
 
@@ -59,8 +68,8 @@ class CurrentMetadata(BaseModel):
 class AvailableOptions(BaseModel):
     """Structured Paperless metadata options passed to the agent."""
 
-    document_types: list[EntityOption] = Field(default_factory=list)
-    tags: list[EntityOption] = Field(default_factory=list)
+    document_types: list[GuidedEntityOption] = Field(default_factory=list)
+    tags: list[GuidedEntityOption] = Field(default_factory=list)
     correspondents: list[EntityOption] = Field(default_factory=list)
     storage_paths: list[EntityOption] = Field(default_factory=list)
 

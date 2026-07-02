@@ -42,6 +42,10 @@ class Settings(BaseSettings):
         default="Inbox",
         description="Comma-separated tag names that should never be removed from documents",
     )
+    metadata_guidance_file: str | None = Field(
+        default="metadata_guidance.yaml",
+        description="Path to YAML file with allowed tags and document types plus usage guidance",
+    )
     processing_delay_between_documents_seconds: float = Field(
         default=0,
         ge=0,
@@ -129,6 +133,11 @@ def load_settings() -> Settings:
         )
         print(
             '  - PROTECTED_TAGS: Comma-separated tag names to never remove (default: "Inbox")',
+            file=sys.stderr,
+        )
+        print(
+            "  - METADATA_GUIDANCE_FILE: Path to YAML metadata guidance "
+            "(default: metadata_guidance.yaml)",
             file=sys.stderr,
         )
         print(

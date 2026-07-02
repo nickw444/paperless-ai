@@ -11,6 +11,7 @@ from llm.schemas import (
     CategorizationAgentOutput,
     CurrentMetadata,
     EntityOption,
+    GuidedEntityOption,
     build_categorization_json_schema,
     is_pending_correspondent_id,
     merge_correspondent_options,
@@ -24,12 +25,12 @@ from llm.schemas import (
 def _sample_options() -> AvailableOptions:
     return AvailableOptions(
         document_types=[
-            EntityOption(id=10, name="Invoice"),
-            EntityOption(id=11, name="Receipt"),
+            GuidedEntityOption(id=10, name="Invoice", use_when="Invoices"),
+            GuidedEntityOption(id=11, name="Receipt", use_when="Receipts"),
         ],
         tags=[
-            EntityOption(id=2, name="financial"),
-            EntityOption(id=3, name="2024"),
+            GuidedEntityOption(id=2, name="financial", use_when="Financial"),
+            GuidedEntityOption(id=3, name="2024", use_when="Year 2024"),
         ],
         correspondents=[EntityOption(id=5, name="Acme Corp")],
         storage_paths=[EntityOption(id=7, name="Bills")],
@@ -73,7 +74,11 @@ def test_format_available_options_json_is_compact():
 
     assert "\n" not in rendered
     parsed = json.loads(rendered)
-    assert parsed["document_types"][0] == {"id": 10, "name": "Invoice"}
+    assert parsed["document_types"][0] == {
+        "id": 10,
+        "name": "Invoice",
+        "use_when": "Invoices",
+    }
     assert "pending_correspondents" not in parsed
 
 

@@ -4,6 +4,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from config.metadata_guidance import (
+    MetadataGuidance,
+    build_guided_options,
+    load_metadata_guidance,
+    warn_unknown_guidance_names,
+)
 from config.settings import settings
 from llm.schemas import (
     AgentCategorizationResult,
@@ -58,6 +64,47 @@ class CategorizationEngine:
         }
         self.documents_with_new_entities: set[int] = set()  # Track which docs need re-processing
         self.last_agent_result: AgentCategorizationResult | None = None
+        metadata_guidance = self._load_metadata_guidance()
+        self._tag_guidance_by_name = metadata_guidance.tags
+        self._document_type_guidance_by_name = metadata_guidance.document_types
+        self._guidance_warned = False
+
+    def _guidance_path(self) -> Path | None:
+        if not settings.metadata_guidance_file:
+            return None
+        return Path.cwd() / settings.metadata_guidance_file
+
+    def _load_metadata_guidance(self):
+        path = self._guidance_path()
+        if path is None:
+            return MetadataGuidance()
+        return load_metadata_guidance(path)
+
+    def _warn_unknown_guidance(self) -> None:
+        if self._guidance_warned:
+            return
+
+        path = self._guidance_path()
+        if path is None:
+            return
+
+        if self._tag_guidance_by_name:
+            warn_unknown_guidance_names(
+                self._tag_guidance_by_name,
+                [tag.name for tag in self._tags],
+                path=path,
+                label="tags",
+            )
+
+        if self._document_type_guidance_by_name:
+            warn_unknown_guidance_names(
+                self._document_type_guidance_by_name,
+                [document_type.name for document_type in self._document_types],
+                path=path,
+                label="document_types",
+            )
+
+        self._guidance_warned = True
 
     def _load_metadata(self):
         """Load and cache all metadata from Paperless."""
@@ -69,6 +116,7 @@ class CategorizationEngine:
             self._document_types = self.paperless.list_document_types()
         if self._storage_paths is None:
             self._storage_paths = self.paperless.list_storage_paths()
+        self._warn_unknown_guidance()
 
     def _load_custom_fields(self) -> None:
         """Load and cache custom fields from Paperless."""
@@ -243,12 +291,14 @@ class CategorizationEngine:
         omitted_tag_ids = set(protected_tag_ids) | set(engine_managed_tag_ids)
 
         available_options = AvailableOptions(
-            document_types=[EntityOption(id=t.id, name=t.name) for t in self._document_types],
-            tags=[
-                EntityOption(id=t.id, name=t.name)
-                for t in self._tags
-                if t.id not in omitted_tag_ids
-            ],
+            document_types=build_guided_options(
+                self._document_types,
+                self._document_type_guidance_by_name,
+            ),
+            tags=build_guided_options(
+                [tag for tag in self._tags if tag.id not in omitted_tag_ids],
+                self._tag_guidance_by_name,
+            ),
             correspondents=merge_correspondent_options(
                 [EntityOption(id=c.id, name=c.name) for c in self._correspondents],
                 pending_new_correspondents,

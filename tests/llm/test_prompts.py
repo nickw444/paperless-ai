@@ -1,10 +1,11 @@
 """Tests for categorization prompt assembly."""
 
 from llm.prompts import (
+    build_categorization_instructions,
     build_categorization_prompt,
     format_current_metadata_json,
 )
-from llm.schemas import AvailableOptions, CurrentMetadata, EntityOption
+from llm.schemas import AvailableOptions, CurrentMetadata, EntityOption, GuidedEntityOption
 from paperless.models import DocumentAttachment
 
 
@@ -23,7 +24,9 @@ def test_build_categorization_prompt_puts_instructions_before_data():
     prompt = build_categorization_prompt(
         content="Invoice total $42",
         available_options=AvailableOptions(
-            document_types=[EntityOption(id=1, name="Bill")],
+            document_types=[
+                GuidedEntityOption(id=1, name="Bill", use_when="Payment requested")
+            ],
         ),
         current_metadata=_sample_current_metadata(),
     )
@@ -35,7 +38,7 @@ def test_build_categorization_prompt_puts_instructions_before_data():
 
     assert instructions_index < metadata_index < ocr_index < options_index
     assert "Invoice total $42" in prompt
-    assert '"document_types":[{"id":1,"name":"Bill"}]' in prompt
+    assert '"document_types":[{"id":1,"name":"Bill","use_when":"Payment requested"}]' in prompt
     assert '"title":"scan.pdf"' in prompt
     assert '"document_date":"2024-01-01"' in prompt
     assert '"tags":[{"id":1,"name":"Inbox"}]' in prompt
@@ -88,6 +91,15 @@ def test_build_categorization_prompt_tells_agent_to_describe_textless_photos():
     assert "set content to a concise" in prompt
     assert "augment generic titles" in prompt
     assert "mime_type: image/jpeg" in prompt
+
+
+def test_categorization_instructions_require_guided_metadata_options():
+    instructions = build_categorization_instructions()
+
+    assert "SEMANTIC TAG MATCHING:" in instructions
+    assert "primarily ABOUT" in instructions
+    assert "available_options.document_types" in instructions
+    assert "available_options.tags" in instructions
 
 
 def test_format_current_metadata_json_is_compact():

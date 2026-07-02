@@ -34,11 +34,12 @@ Based on the document content, current_metadata, and available_options:
    dates mentioned in content. When current_metadata.document_date is already supported by the
    document evidence, return it. Return null only when no reliable document date can be inferred.
 4. Set document_type_id to the best matching id from available_options.document_types,
-   or null. When current_metadata.document_type is set and still appropriate, return its id;
-   change only when OCR or attachment context supports a better match.
+   or null. Each option includes use_when and avoid_when rules. Only types listed in
+   available_options.document_types may be used.
 5. Set tag_ids to relevant ids from available_options.tags (empty list if none apply).
    Use current_metadata.tags as context; when the same tags still apply, return their ids;
-   add or remove only when OCR or attachment context supports the change.
+   add or remove only when OCR or attachment context supports the change. Each tag option
+   includes use_when and avoid_when rules. Only tags listed in available_options.tags may be used.
 6. Set correspondent_id to a matching id from available_options.correspondents, OR set
    new_correspondent_name when no listed correspondent fits (not both).
    When current_metadata.correspondent is set and still appropriate, return its id.
@@ -53,13 +54,7 @@ CORRESPONDENT MATCHING:
    When current_metadata.storage_path is set and still appropriate, return its id.
 
 SEMANTIC TAG MATCHING:
-- Tags should reflect what the document IS ABOUT, not keywords that merely appear in it
-- Utility bill for 123 Main St → tag that property; payslip mentioning an address → do not
-- Receipt for charitable donation → tag Tax Deduction
-- Home office expense receipt → tag Tax Deduction
-- Bill, invoice, or receipt labeled "Tax Invoice" → do not tag Tax or Tax Deduction solely
-  because of that label
-- Ask: "Is this document primarily ABOUT [tag concept]?" If no, do not include the tag
+- Tag what the document is primarily ABOUT, not keywords that merely appear in it.
 
 DOCUMENT TYPE AND STORAGE PATH:
 - Pick the single best match by id, or null if nothing fits"""
@@ -76,7 +71,8 @@ Below you will receive:
 - ocr_content: OCR text of the document, when available.
 - document_attachment: Optional source document file that may provide clearer visual
   context than OCR.
-- available_options: JSON listing valid Paperless entities as {{"id": <int>, "name": "<str>"}}.
+- available_options: JSON listing valid Paperless entities. Tags and document types include
+  use_when and avoid_when guidance. Only listed ids may be used.
 
 Use the document attachment and OCR together when both are available. Prefer the attachment for
 visual layout, handwriting, forms, logos, and OCR mistakes, but keep OCR as useful text context.
@@ -86,7 +82,10 @@ visual layout, handwriting, forms, logos, and OCR mistakes, but keep OCR as usef
 
 def format_available_options_json(available_options: AvailableOptions) -> str:
     """Serialize available options as compact JSON for embedding in prompts."""
-    return json.dumps(available_options.model_dump(mode="json"), separators=(",", ":"))
+    return json.dumps(
+        available_options.model_dump(mode="json", exclude_none=True),
+        separators=(",", ":"),
+    )
 
 
 def format_current_metadata_json(current_metadata: CurrentMetadata) -> str:

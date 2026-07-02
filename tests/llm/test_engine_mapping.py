@@ -9,9 +9,16 @@ from llm.schemas import (
     CategorizationAgentOutput,
     CurrentMetadata,
     EntityOption,
+    GuidedEntityOption,
 )
 from llm.usage import AgentUsageMetadata
 from paperless.models import Document, DocumentAttachment, DocumentType, Tag
+
+_FINANCIAL_GUIDED_TAG = GuidedEntityOption(
+    id=2,
+    name="financial",
+    use_when="Financial documents and invoices.",
+)
 
 
 class StubAgent:
@@ -221,7 +228,7 @@ def test_engine_excludes_configured_protected_tags_from_agent_options():
 
     engine.categorize_document(_make_document())
 
-    assert captured["options"].tags == [EntityOption(id=2, name="financial")]
+    assert captured["options"].tags == [_FINANCIAL_GUIDED_TAG]
 
 
 def test_engine_excludes_lifecycle_tags_from_agent_options_and_current_metadata():
@@ -266,7 +273,7 @@ def test_engine_excludes_lifecycle_tags_from_agent_options_and_current_metadata(
 
     engine.categorize_document(document)
 
-    assert captured["options"].tags == [EntityOption(id=2, name="financial")]
+    assert captured["options"].tags == [_FINANCIAL_GUIDED_TAG]
     assert captured["metadata"].tags == [
         EntityOption(id=1, name="Inbox"),
         EntityOption(id=2, name="financial"),
@@ -485,7 +492,7 @@ def test_engine_excludes_tracking_tags_from_agent_options():
 
     engine.categorize_document(_make_document())
 
-    assert captured["options"].tags == [EntityOption(id=2, name="financial")]
+    assert captured["options"].tags == [_FINANCIAL_GUIDED_TAG]
 
 
 def test_engine_resolves_pending_correspondent_id_for_apply():
