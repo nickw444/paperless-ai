@@ -144,6 +144,19 @@ def test_apply_auto_creates_processing_fields_and_writes_metadata():
     assert paperless.updated_documents[0]["tags"] == [1, 2, 3]
 
 
+def test_apply_writes_suggested_document_date_as_created():
+    engine = CategorizationEngine(agent=StubAgent())
+    paperless = CapturingPaperless()
+    engine.paperless = paperless
+    engine._tags = paperless.list_tags()
+    suggestion = _successful_suggestion()
+    suggestion.suggested_document_date = "2024-01-15"
+
+    _apply_suggestions(engine, [suggestion])
+
+    assert paperless.updated_documents[0]["created"] == "2024-01-15"
+
+
 def test_processing_fields_reload_when_create_reports_existing_name():
     engine = CategorizationEngine(agent=StubAgent())
     paperless = ExistingAfterCreateConflictPaperless()

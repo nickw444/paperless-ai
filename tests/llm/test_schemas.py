@@ -44,6 +44,7 @@ def test_build_categorization_json_schema_is_static_and_compact():
     assert "enum" not in json.dumps(schema)
 
     assert schema["properties"]["content"] == {"type": ["string", "null"]}
+    assert schema["properties"]["document_date"] == {"type": ["string", "null"]}
     assert schema["properties"]["document_type_id"] == {"type": ["integer", "null"]}
     assert schema["properties"]["tag_ids"] == {
         "type": "array",
@@ -83,6 +84,7 @@ def test_validate_categorization_output_accepts_valid_payload():
             {
                 "title": "Invoice - Acme - Jan 2024",
                 "content": "Invoice\nAcme\nTotal $42",
+                "document_date": "2024-01-15",
                 "document_type_id": 10,
                 "tag_ids": [2],
                 "correspondent_id": 5,
@@ -95,6 +97,7 @@ def test_validate_categorization_output_accepts_valid_payload():
 
     assert output.title == "Invoice - Acme - Jan 2024"
     assert output.content == "Invoice\nAcme\nTotal $42"
+    assert output.document_date.isoformat() == "2024-01-15"
     assert output.document_type_id == 10
     assert output.tag_ids == [2]
 
@@ -236,6 +239,7 @@ def test_current_metadata_defaults_optional_fields():
     metadata = CurrentMetadata(title="scan.pdf")
 
     assert metadata.title == "scan.pdf"
+    assert metadata.document_date is None
     assert metadata.document_type is None
     assert metadata.tags == []
     assert metadata.correspondent is None
@@ -245,6 +249,7 @@ def test_current_metadata_defaults_optional_fields():
 def test_current_metadata_serializes_entity_options():
     metadata = CurrentMetadata(
         title="Invoice",
+        document_date="2024-01-15",
         document_type=EntityOption(id=10, name="Invoice"),
         tags=[EntityOption(id=1, name="Inbox")],
         correspondent=EntityOption(id=5, name="Acme Corp"),
@@ -252,4 +257,5 @@ def test_current_metadata_serializes_entity_options():
     )
 
     assert metadata.document_type == EntityOption(id=10, name="Invoice")
+    assert metadata.document_date.isoformat() == "2024-01-15"
     assert metadata.correspondent == EntityOption(id=5, name="Acme Corp")

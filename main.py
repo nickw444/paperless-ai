@@ -302,6 +302,7 @@ def _apply_suggestions(engine, suggestions):
                     document_id=suggestion.document_id,
                     title=suggestion.suggested_title,
                     content=suggestion.suggested_content,
+                    created=suggestion.suggested_document_date,
                     correspondent=engine.resolve_suggestion_correspondent_id(suggestion),
                     document_type=suggestion.suggested_type_id,
                     storage_path=suggestion.suggested_storage_path_id,
@@ -389,6 +390,17 @@ def _display_suggestion(suggestion):
             f"  Content: [cyan]LLM OCR replacement suggested "
             f"({len(suggestion.suggested_content):,} chars)[/cyan]"
         )
+
+    # Document date
+    current_document_date = suggestion.current_document_date or "None"
+    suggested_document_date = suggestion.suggested_document_date
+    if suggested_document_date and current_document_date != suggested_document_date:
+        console.print(
+            f"  Date Created: [dim]{current_document_date}[/dim] -> "
+            f"[cyan]{suggested_document_date}[/cyan]"
+        )
+    elif current_document_date != "None":
+        console.print(f"  Date Created: {current_document_date}")
 
     # Type
     current_type = suggestion.current_type_name or "None"

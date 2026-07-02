@@ -225,6 +225,7 @@ class CategorizationEngine:
             return CategorizationSuggestion(
                 document_id=document.id,
                 current_title=document.title,
+                current_document_date=document.created_date,
                 current_type=document.document_type,
                 current_type_name=current_type_name,
                 current_tags=document.tags,
@@ -257,6 +258,7 @@ class CategorizationEngine:
 
         current_metadata = CurrentMetadata(
             title=document.title,
+            document_date=document.created_date,
             document_type=self._to_entity_option(document.document_type, self._document_types),
             tags=self._get_tag_options(current_user_tag_ids),
             correspondent=self._to_entity_option(document.correspondent, self._correspondents),
@@ -279,6 +281,7 @@ class CategorizationEngine:
             return CategorizationSuggestion(
                 document_id=document.id,
                 current_title=document.title,
+                current_document_date=document.created_date,
                 current_type=document.document_type,
                 current_type_name=current_type_name,
                 current_tags=document.tags,
@@ -297,6 +300,7 @@ class CategorizationEngine:
             return CategorizationSuggestion(
                 document_id=document.id,
                 current_title=document.title,
+                current_document_date=document.created_date,
                 current_type=document.document_type,
                 current_type_name=current_type_name,
                 current_tags=document.tags,
@@ -366,6 +370,10 @@ class CategorizationEngine:
             current_title=document.title,
             suggested_title=output.title,
             suggested_content=output.content,
+            current_document_date=document.created_date,
+            suggested_document_date=(
+                output.document_date.isoformat() if output.document_date is not None else None
+            ),
             current_type=document.document_type,
             current_type_name=current_type_name,
             suggested_type=suggested_type_name,

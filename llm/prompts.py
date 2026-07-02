@@ -27,13 +27,19 @@ Based on the document content, current_metadata, and available_options:
    with the main visible subject or scene.
    Return null only when the provided OCR content is already accurate enough or there is not
    enough evidence to improve, extract, or describe it.
-3. Set document_type_id to the best matching id from available_options.document_types,
+3. Set document_date to the document's own date in YYYY-MM-DD format, or null.
+   Use dates printed in the document body, letterhead, invoice/receipt dates, statement periods,
+   form dates, email headers, or other visible source context. Prefer the date the document was
+   issued/sent/created over due dates, payment dates, upload dates, scan dates, or unrelated
+   dates mentioned in content. When current_metadata.document_date is already supported by the
+   document evidence, return it. Return null only when no reliable document date can be inferred.
+4. Set document_type_id to the best matching id from available_options.document_types,
    or null. When current_metadata.document_type is set and still appropriate, return its id;
    change only when OCR or attachment context supports a better match.
-4. Set tag_ids to relevant ids from available_options.tags (empty list if none apply).
+5. Set tag_ids to relevant ids from available_options.tags (empty list if none apply).
    Use current_metadata.tags as context; when the same tags still apply, return their ids;
    add or remove only when OCR or attachment context supports the change.
-5. Set correspondent_id to a matching id from available_options.correspondents, OR set
+6. Set correspondent_id to a matching id from available_options.correspondents, OR set
    new_correspondent_name when no listed correspondent fits (not both).
    When current_metadata.correspondent is set and still appropriate, return its id.
 
@@ -43,7 +49,7 @@ CORRESPONDENT MATCHING:
 - Only use new_correspondent_name when no correspondent in the list fits
 - Normalize new names: drop legal suffixes (Inc., LLC), URLs, and excess punctuation
 
-6. Set storage_path_id to the best matching id from available_options.storage_paths, or null.
+7. Set storage_path_id to the best matching id from available_options.storage_paths, or null.
    When current_metadata.storage_path is set and still appropriate, return its id.
 
 SEMANTIC TAG MATCHING:
@@ -80,12 +86,12 @@ visual layout, handwriting, forms, logos, and OCR mistakes, but keep OCR as usef
 
 def format_available_options_json(available_options: AvailableOptions) -> str:
     """Serialize available options as compact JSON for embedding in prompts."""
-    return json.dumps(available_options.model_dump(), separators=(",", ":"))
+    return json.dumps(available_options.model_dump(mode="json"), separators=(",", ":"))
 
 
 def format_current_metadata_json(current_metadata: CurrentMetadata) -> str:
     """Serialize current metadata as compact JSON for embedding in prompts."""
-    return json.dumps(current_metadata.model_dump(), separators=(",", ":"))
+    return json.dumps(current_metadata.model_dump(mode="json"), separators=(",", ":"))
 
 
 def build_embedded_categorization_data(

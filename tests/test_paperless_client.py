@@ -64,6 +64,7 @@ def test_update_document_includes_content_when_provided():
         document_id=42,
         title="Invoice",
         content="Invoice\nTotal $42",
+        created="2024-01-15",
         tags=[1, 2],
     )
 
@@ -73,6 +74,7 @@ def test_update_document_includes_content_when_provided():
             {
                 "title": "Invoice",
                 "content": "Invoice\nTotal $42",
+                "created": "2024-01-15",
                 "tags": [1, 2],
             },
         )

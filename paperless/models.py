@@ -122,6 +122,8 @@ class CategorizationSuggestion(BaseModel):
     current_title: str
     suggested_title: str | None = None
     suggested_content: str | None = None
+    current_document_date: str | None = None
+    suggested_document_date: str | None = None
     current_type: int | None = None
     current_type_name: str | None = None
     suggested_type: str | None = None

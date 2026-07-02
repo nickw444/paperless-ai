@@ -401,6 +401,7 @@ class PaperlessClient:
         document_id: int,
         title: str | None = None,
         content: str | None = None,
+        created: str | None = None,
         correspondent: int | None = None,
         document_type: int | None = None,
         storage_path: int | None = None,
@@ -413,6 +414,8 @@ class PaperlessClient:
             data["title"] = title
         if content is not None:
             data["content"] = content
+        if created is not None:
+            data["created"] = created
         if correspondent is not None:
             data["correspondent"] = correspondent
         if document_type is not None:

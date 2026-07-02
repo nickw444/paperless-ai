@@ -11,6 +11,7 @@ from paperless.models import DocumentAttachment
 def _sample_current_metadata() -> CurrentMetadata:
     return CurrentMetadata(
         title="scan.pdf",
+        document_date="2024-01-01",
         document_type=None,
         tags=[EntityOption(id=1, name="Inbox")],
         correspondent=None,
@@ -36,7 +37,10 @@ def test_build_categorization_prompt_puts_instructions_before_data():
     assert "Invoice total $42" in prompt
     assert '"document_types":[{"id":1,"name":"Bill"}]' in prompt
     assert '"title":"scan.pdf"' in prompt
+    assert '"document_date":"2024-01-01"' in prompt
     assert '"tags":[{"id":1,"name":"Inbox"}]' in prompt
+    assert "Set document_date to the document's own date" in prompt
+    assert "letterhead" in prompt
     assert "Set content to corrected document OCR text" in prompt
     assert "Do not summarize" in prompt
     assert "photo or image without clear document text" in prompt
@@ -90,6 +94,7 @@ def test_format_current_metadata_json_is_compact():
     rendered = format_current_metadata_json(
         CurrentMetadata(
             title="Manual Title",
+            document_date="2024-01-15",
             tags=[
                 EntityOption(id=2, name="financial"),
                 EntityOption(id=1, name="Inbox"),
@@ -100,5 +105,6 @@ def test_format_current_metadata_json_is_compact():
 
     assert "\n" not in rendered
     assert '"title":"Manual Title"' in rendered
+    assert '"document_date":"2024-01-15"' in rendered
     assert '"tags":[{"id":2,"name":"financial"},{"id":1,"name":"Inbox"}]' in rendered
     assert '"correspondent":{"id":5,"name":"Acme Corp"}' in rendered

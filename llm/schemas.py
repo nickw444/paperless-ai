@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, model_validator
@@ -22,6 +23,7 @@ class CategorizationAgentOutput(BaseModel):
 
     title: str
     content: str | None = None
+    document_date: date | None = None
     document_type_id: int | None = None
     tag_ids: list[int] = Field(default_factory=list)
     correspondent_id: int | None = None
@@ -47,6 +49,7 @@ class CurrentMetadata(BaseModel):
     """Existing Paperless metadata for a document before categorization."""
 
     title: str
+    document_date: date | None = None
     document_type: EntityOption | None = None
     tags: list[EntityOption] = Field(default_factory=list)
     correspondent: EntityOption | None = None
@@ -179,6 +182,7 @@ def build_categorization_json_schema() -> dict[str, Any]:
         "properties": {
             "title": {"type": "string"},
             "content": {"type": ["string", "null"]},
+            "document_date": {"type": ["string", "null"]},
             "document_type_id": {"type": ["integer", "null"]},
             "tag_ids": {"type": "array", "items": {"type": "integer"}},
             "correspondent_id": {"type": ["integer", "null"]},
@@ -188,6 +192,7 @@ def build_categorization_json_schema() -> dict[str, Any]:
         "required": [
             "title",
             "content",
+            "document_date",
             "document_type_id",
             "tag_ids",
             "correspondent_id",
