@@ -89,14 +89,9 @@ Analyze documents and show suggestions:
 python main.py analyze
 ```
 
-Analyze with review and apply:
-```bash
-python main.py analyze --apply
-```
-
 Process documents in batches:
 ```bash
-python main.py analyze --limit 10 --apply
+python main.py analyze --limit 10
 ```
 
 Analyze a specific document:
@@ -106,12 +101,12 @@ python main.py analyze --id 123
 
 Reprocess inbox documents whose stored paperless-ai version is stale:
 ```bash
-python main.py analyze --reprocess-stale --apply
+python main.py analyze --reprocess-stale
 ```
 
 Reprocess all inbox documents, including documents already marked parsed:
 ```bash
-python main.py analyze --reprocess-all --apply
+python main.py analyze --reprocess-all
 ```
 
 Inspect raw agent input and output:

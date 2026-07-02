@@ -87,7 +87,6 @@ def list_inbox(output):
 )
 @click.option("--limit", type=int, help="Process only first N documents")
 @click.option("--export", type=click.Path(), help="Export suggestions to file (JSON)")
-@click.option("--apply", is_flag=True, help="Apply changes after review")
 @click.option(
     "--yes",
     "-y",
@@ -105,7 +104,7 @@ def list_inbox(output):
     is_flag=True,
     help="Include all inbox documents, even if already parsed",
 )
-def analyze(doc_id, output, limit, export, apply, yes, debug, reprocess_stale, reprocess_all):
+def analyze(doc_id, output, limit, export, yes, debug, reprocess_stale, reprocess_all):
     """Analyze inbox documents and suggest categorizations."""
     try:
         if reprocess_stale and reprocess_all:
@@ -182,59 +181,13 @@ def analyze(doc_id, output, limit, export, apply, yes, debug, reprocess_stale, r
             for suggestion in suggestions:
                 _display_suggestion(suggestion)
 
-        # Show new entities review if any were found (only correspondents now)
-        if engine.new_entities_found and any(engine.new_entities_found.values()):
-            _show_new_entities_review(engine.new_entities_found)
-
-            if apply:
-                if _confirm_or_yes("\nCreate these new correspondents in Paperless?", yes=yes):
-                    created = _create_new_entities(engine, engine.new_entities_found)
-                    console.print(
-                        f"[green]✓[/green] Created {created['correspondents']} new correspondent(s)"
-                    )
-
-                    # Re-run categorization ONLY for documents with NEW correspondents
-                    if engine.documents_with_new_entities:
-                        count = len(engine.documents_with_new_entities)
-                        if _confirm_or_yes(
-                            f"\nRe-categorize {count} documents that had new correspondents?",
-                            yes=yes,
-                        ):
-                            docs_to_reprocess = [
-                                doc
-                                for doc in documents
-                                if doc.id in engine.documents_with_new_entities
-                            ]
-                            new_suggestions = []
-                            with console.status(
-                                "[bold green]Re-categorizing documents..."
-                            ) as status:
-                                for i, doc in enumerate(docs_to_reprocess, 1):
-                                    count_text = f"{i}/{len(docs_to_reprocess)}"
-                                    status.update(
-                                        f"[bold green]Re-categorizing document {count_text}..."
-                                    )
-                                    new_suggestion = engine.categorize_document(doc)
-                                    if debug and engine.last_agent_result:
-                                        print_agent_debug_traces(
-                                            console,
-                                            engine.last_agent_result.debug_traces,
-                                            document_id=doc.id,
-                                        )
-                                    new_suggestions.append(new_suggestion)
-                            for doc in docs_to_reprocess:
-                                engine.documents_with_new_entities.discard(doc.id)
-                            # Replace old suggestions with new ones
-                            for new_sugg in new_suggestions:
-                                for i, old_sugg in enumerate(suggestions):
-                                    if old_sugg.document_id == new_sugg.document_id:
-                                        suggestions[i] = new_sugg
-                                        break
-
-        # Apply changes if requested
-        if apply and suggestions:
-            if _confirm_or_yes("\nApply categorization suggestions to documents?", yes=yes):
-                _apply_suggestions(engine, suggestions)
+        _review_new_entities_and_apply(
+            engine,
+            documents,
+            suggestions,
+            yes=yes,
+            debug=debug,
+        )
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -249,6 +202,77 @@ def _confirm_or_yes(prompt: str, *, yes: bool, confirm=click.confirm) -> bool:
     if yes:
         return True
     return confirm(prompt)
+
+
+def _review_new_entities_and_apply(
+    engine,
+    documents,
+    suggestions,
+    *,
+    yes: bool,
+    debug: bool = False,
+    confirm=click.confirm,
+    create_new_entities=None,
+    apply_suggestions=None,
+):
+    """Review new correspondents, optionally re-analyze, then apply suggestions."""
+    if create_new_entities is None:
+        create_new_entities = _create_new_entities
+    if apply_suggestions is None:
+        apply_suggestions = _apply_suggestions
+
+    if engine.new_entities_found and any(engine.new_entities_found.values()):
+        _show_new_entities_review(engine.new_entities_found)
+
+        if _confirm_or_yes(
+            "\nCreate these new correspondents in Paperless?",
+            yes=yes,
+            confirm=confirm,
+        ):
+            created = create_new_entities(engine, engine.new_entities_found)
+            console.print(
+                f"[green]✓[/green] Created {created['correspondents']} new correspondent(s)"
+            )
+
+            # Re-run categorization ONLY for documents with NEW correspondents
+            if engine.documents_with_new_entities:
+                count = len(engine.documents_with_new_entities)
+                if _confirm_or_yes(
+                    f"\nRe-categorize {count} documents that had new correspondents?",
+                    yes=yes,
+                    confirm=confirm,
+                ):
+                    docs_to_reprocess = [
+                        doc for doc in documents if doc.id in engine.documents_with_new_entities
+                    ]
+                    new_suggestions = []
+                    with console.status("[bold green]Re-categorizing documents...") as status:
+                        for i, doc in enumerate(docs_to_reprocess, 1):
+                            count_text = f"{i}/{len(docs_to_reprocess)}"
+                            status.update(f"[bold green]Re-categorizing document {count_text}...")
+                            new_suggestion = engine.categorize_document(doc)
+                            if debug and engine.last_agent_result:
+                                print_agent_debug_traces(
+                                    console,
+                                    engine.last_agent_result.debug_traces,
+                                    document_id=doc.id,
+                                )
+                            new_suggestions.append(new_suggestion)
+                    for doc in docs_to_reprocess:
+                        engine.documents_with_new_entities.discard(doc.id)
+                    # Replace old suggestions with new ones
+                    for new_sugg in new_suggestions:
+                        for i, old_sugg in enumerate(suggestions):
+                            if old_sugg.document_id == new_sugg.document_id:
+                                suggestions[i] = new_sugg
+                                break
+
+    if suggestions and _confirm_or_yes(
+        "\nApply categorization suggestions to documents?",
+        yes=yes,
+        confirm=confirm,
+    ):
+        apply_suggestions(engine, suggestions)
 
 
 def _apply_suggestions(engine, suggestions):
@@ -448,7 +472,7 @@ def _display_suggestion(suggestion):
 
     # Show warning if there are NEW correspondents
     if suggestion.suggested_correspondent_is_new:
-        console.print("  [yellow]⚠️  New correspondent will be created if --apply is used[/yellow]")
+        console.print("  [yellow]⚠️  New correspondent can be created during review[/yellow]")
 
 
 def _should_analyze_for_stale_reprocessing(
