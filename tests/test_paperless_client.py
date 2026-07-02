@@ -103,6 +103,7 @@ class ListingPaperlessClient(PaperlessClient):
     """Paperless client that returns canned paginated document payloads."""
 
     def __init__(self):
+        self.captured_params: list[dict | None] = []
         self.documents = [
             {
                 "id": 1,
@@ -141,8 +142,19 @@ class ListingPaperlessClient(PaperlessClient):
 
     def _get_all_pages(self, endpoint: str, params: dict | None = None) -> list[dict]:
         assert endpoint == "/api/documents/"
-        assert params == {"is_in_inbox": "true"}
-        return self.documents
+        self.captured_params.append(params)
+        if params == {"is_in_inbox": "true"}:
+            return self.documents
+        return []
+
+
+def test_list_documents_passes_query_to_api():
+    client = ListingPaperlessClient()
+
+    documents = client.list_documents(query="tag:Bill")
+
+    assert documents == []
+    assert client.captured_params == [{"query": "tag:Bill"}]
 
 
 def test_list_inbox_documents_excludes_any_requested_tag():

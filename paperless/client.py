@@ -233,16 +233,42 @@ class PaperlessClient:
             exclude_tag_id: Optional tag ID to exclude from results.
             exclude_tag_ids: Optional tag IDs to exclude from results.
         """
-        results = self._get_all_pages("/api/documents/", params={"is_in_inbox": "true"})
-        documents = [Document(**doc) for doc in results]
-
         excluded_tag_ids = set(exclude_tag_ids or [])
         if exclude_tag_id is not None:
             excluded_tag_ids.add(exclude_tag_id)
 
-        # Filter out documents with any excluded tag if specified.
-        if excluded_tag_ids:
-            documents = [doc for doc in documents if excluded_tag_ids.isdisjoint(doc.tags)]
+        return self.list_documents(
+            is_in_inbox=True,
+            exclude_tag_ids=excluded_tag_ids or None,
+        )
+
+    def list_documents(
+        self,
+        *,
+        query: str | None = None,
+        is_in_inbox: bool | None = None,
+        exclude_tag_ids: Iterable[int] | None = None,
+    ) -> list[Document]:
+        """
+        List documents, optionally filtered by Paperless query syntax or inbox status.
+
+        Args:
+            query: Paperless full-text query (e.g. "tag:Bill").
+            is_in_inbox: When set, restrict to inbox/non-inbox documents.
+            exclude_tag_ids: Optional tag IDs to exclude from results.
+        """
+        params: dict[str, str] = {}
+        if query:
+            params["query"] = query
+        if is_in_inbox is not None:
+            params["is_in_inbox"] = "true" if is_in_inbox else "false"
+
+        results = self._get_all_pages("/api/documents/", params=params or None)
+        documents = [Document(**doc) for doc in results]
+
+        excluded = set(exclude_tag_ids or [])
+        if excluded:
+            documents = [doc for doc in documents if excluded.isdisjoint(doc.tags)]
 
         return documents
 

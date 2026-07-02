@@ -21,6 +21,14 @@ def test_analyze_exposes_batch_size_option():
     assert "Process documents in batches of this size" in result.output
 
 
+def test_analyze_exposes_query_option():
+    result = CliRunner().invoke(cli, ["analyze", "--help"])
+
+    assert result.exit_code == 0
+    assert "--query" in result.output
+    assert "targeted backfill" in result.output
+
+
 def test_confirm_or_yes_skips_prompt_when_yes_is_set():
     prompts: list[str] = []
 
