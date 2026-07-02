@@ -42,6 +42,11 @@ class Settings(BaseSettings):
         default="Inbox",
         description="Comma-separated tag names that should never be removed from documents",
     )
+    processing_delay_between_documents_seconds: float = Field(
+        default=0,
+        ge=0,
+        description="Delay between document analyses in seconds (0 disables delay)",
+    )
     paperless_ai_processing_version: str = Field(
         default="1",
         description="User-defined paperless-ai processing version for backfill detection",
@@ -124,6 +129,11 @@ def load_settings() -> Settings:
         )
         print(
             '  - PROTECTED_TAGS: Comma-separated tag names to never remove (default: "Inbox")',
+            file=sys.stderr,
+        )
+        print(
+            "  - PROCESSING_DELAY_BETWEEN_DOCUMENTS_SECONDS: Delay between document analyses "
+            "(default: 0, disabled)",
             file=sys.stderr,
         )
         print(

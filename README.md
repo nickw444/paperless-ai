@@ -53,6 +53,9 @@ CODEX_TIMEOUT=120
 CODEX_MAX_CONTENT_CHARS=2000
 CODEX_REASONING_EFFORT=minimal
 
+# Processing
+PROCESSING_DELAY_BETWEEN_DOCUMENTS_SECONDS=0
+
 # Document attachments
 ENABLE_DOCUMENT_ATTACHMENTS=true
 MAX_ATTACHMENT_BYTES=20000000
@@ -128,6 +131,7 @@ python main.py analyze --export suggestions.json
 - **Incremental workflow**: Already-processed documents are automatically excluded
 - **Backfill workflow**: Reprocess stale or all parsed inbox documents with explicit flags
 - **Processing metadata**: Writes model, processing version, and token JSON to Paperless custom fields
+- **Processing delay**: Optionally delay between document analyses with `PROCESSING_DELAY_BETWEEN_DOCUMENTS_SECONDS`
 - **Protected tag preservation**: Keeps configured protected tags for manual review workflows
 - **Lifecycle tag ownership**: Omits `paperless-ai-parsed` and `paperless-ai-failed` from agent choices
 - **JSON export**: Save suggestions for later review or automation

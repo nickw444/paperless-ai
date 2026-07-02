@@ -46,3 +46,7 @@ def test_processing_metadata_field_names_can_be_overridden():
     assert settings.paperless_ai_version_field_name == "ai-version"
     assert settings.paperless_ai_model_field_name == "ai-model"
     assert settings.paperless_ai_tokens_field_name == "ai-tokens"
+
+
+def test_processing_delay_between_documents_seconds_defaults_to_disabled():
+    assert Settings.model_fields["processing_delay_between_documents_seconds"].default == 0

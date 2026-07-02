@@ -2,12 +2,14 @@
 
 import json
 import sys
+import time
 
 import click
 from rich.console import Console
 from rich.table import Table
 
 from categorizer.engine import FAILED_TAG_NAME, PARSED_TAG_NAME, CategorizationEngine
+from config.settings import settings
 from llm.codex import CodexAgent
 from llm.debug import print_agent_debug_traces
 from paperless.client import PaperlessClient
@@ -162,6 +164,8 @@ def analyze(doc_id, output, limit, export, batch_size, yes, debug, reprocess_sta
 
         all_suggestions = []
         total_batches = (len(documents) + batch_size - 1) // batch_size
+        processing_delay_seconds = settings.processing_delay_between_documents_seconds
+        documents_analyzed = 0
 
         for batch_start in range(0, len(documents), batch_size):
             batch_documents = documents[batch_start : batch_start + batch_size]
@@ -179,8 +183,11 @@ def analyze(doc_id, output, limit, export, batch_size, yes, debug, reprocess_sta
             suggestions = []
             with console.status("[bold green]Analyzing documents...") as status:
                 for i, doc in enumerate(batch_documents, 1):
+                    if processing_delay_seconds > 0 and documents_analyzed > 0:
+                        time.sleep(processing_delay_seconds)
                     status.update(f"[bold green]Analyzing document {i}/{len(batch_documents)}...")
                     suggestion = engine.categorize_document(doc)
+                    documents_analyzed += 1
                     if debug and engine.last_agent_result:
                         print_agent_debug_traces(
                             console,
