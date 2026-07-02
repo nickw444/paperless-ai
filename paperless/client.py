@@ -364,10 +364,10 @@ class PaperlessClient:
         return [CustomField(**field) for field in results]
 
     def create_correspondent(self, name: str) -> Correspondent:
-        """Create a new correspondent with ML matching enabled."""
+        """Create a new correspondent with automatic matching disabled."""
         data = {
             "name": name,
-            "matching_algorithm": 6,  # 6 = Auto (ML matching)
+            "matching_algorithm": 0,
         }
         result = self._post("/api/correspondents/", data)
         return Correspondent(**result)

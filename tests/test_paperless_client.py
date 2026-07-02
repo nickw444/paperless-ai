@@ -6,12 +6,34 @@ from paperless.client import PaperlessClient
 
 
 class CapturingPaperlessClient(PaperlessClient):
-    """Paperless client that captures PATCH payloads without network access."""
+    """Paperless client that captures request payloads without network access."""
 
     def __init__(self):
         self.patch_calls: list[tuple[str, dict]] = []
         self.post_calls: list[tuple[str, dict]] = []
         self.page_results: dict[str, list[dict]] = {}
+
+    def _post(self, endpoint: str, data: dict) -> dict:
+        self.post_calls.append((endpoint, data))
+        if endpoint == "/api/correspondents/":
+            return {
+                "id": 7,
+                "name": data["name"],
+                "slug": data["name"].lower().replace(" ", "-"),
+                "match": data.get("match", ""),
+                "matching_algorithm": data.get("matching_algorithm", 0),
+            }
+        if endpoint == "/api/custom_fields/":
+            return {
+                "id": 99,
+                "name": data["name"],
+                "data_type": data["data_type"],
+                "extra_data": {},
+            }
+        return {
+            "id": 99,
+            "name": data.get("name", ""),
+        }
 
     def _patch(self, endpoint: str, data: dict) -> dict:
         self.patch_calls.append((endpoint, data))
@@ -28,15 +50,6 @@ class CapturingPaperlessClient(PaperlessClient):
             "modified": datetime(2024, 1, 1).isoformat(),
             "added": datetime(2024, 1, 1).isoformat(),
             "original_file_name": "scan.pdf",
-        }
-
-    def _post(self, endpoint: str, data: dict) -> dict:
-        self.post_calls.append((endpoint, data))
-        return {
-            "id": 99,
-            "name": data["name"],
-            "data_type": data["data_type"],
-            "extra_data": {},
         }
 
     def _get_all_pages(self, endpoint: str, params: dict | None = None) -> list[dict]:
@@ -65,6 +78,23 @@ def test_update_document_includes_content_when_provided():
         )
     ]
     assert document.content == "Invoice\nTotal $42"
+
+
+def test_create_correspondent_disables_automatic_matching():
+    client = CapturingPaperlessClient()
+
+    correspondent = client.create_correspondent("Acme Corp")
+
+    assert client.post_calls == [
+        (
+            "/api/correspondents/",
+            {
+                "name": "Acme Corp",
+                "matching_algorithm": 0,
+            },
+        )
+    ]
+    assert correspondent.matching_algorithm == 0
 
 
 class ListingPaperlessClient(PaperlessClient):

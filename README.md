@@ -16,7 +16,7 @@ Manually categorizing documents in Paperless-ngx is time-consuming. This tool au
 - Suggesting corrected OCR content for Paperless' document content field
 - Suggesting metadata based on your existing tags, correspondents, types, and storage paths
 - Learning your organizational patterns by matching against existing entities
-- Creating new correspondents when needed (with ML matching enabled)
+- Creating new correspondents when needed with automatic matching disabled
 - Allowing review before applying changes
 - Avoiding API token costs by leveraging the Codex CLI instead of direct APIs
 
@@ -122,7 +122,7 @@ python main.py analyze --export suggestions.json
 ## Features
 
 - **Intelligent matching**: Codex tries to match existing entities before suggesting new ones
-- **Correspondent creation**: Suggests new correspondents when none match, with ML auto-matching enabled
+- **Correspondent creation**: Suggests new correspondents when none match, with automatic matching disabled
 - **LLM OCR content**: Optionally applies Codex-produced replacement document content
 - **Batch processing**: Process documents incrementally with `--limit`
 - **Incremental workflow**: Already-processed documents are automatically excluded
