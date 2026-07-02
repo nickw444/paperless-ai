@@ -408,7 +408,7 @@ def _display_suggestion(suggestion):
 
     # Show warning if there are NEW correspondents
     if suggestion.suggested_correspondent_is_new:
-        console.print("  [yellow]⚠️  New correspondent can be created during review[/yellow]")
+        console.print("  [yellow]⚠️  New correspondent will be created during review[/yellow]")
 
 
 def _should_analyze_for_stale_reprocessing(
