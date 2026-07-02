@@ -11,7 +11,14 @@ def test_analyze_exposes_yes_flag():
     assert result.exit_code == 0
     assert "-y, --yes" in result.output
     assert "Automatically confirm apply-time prompts" in result.output
-    assert "--apply" not in result.output
+
+
+def test_analyze_exposes_batch_size_option():
+    result = CliRunner().invoke(cli, ["analyze", "--help"])
+
+    assert result.exit_code == 0
+    assert "--batch-size" in result.output
+    assert "Process documents in batches of this size" in result.output
 
 
 def test_confirm_or_yes_skips_prompt_when_yes_is_set():

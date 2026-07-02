@@ -88,6 +88,13 @@ def list_inbox(output):
 @click.option("--limit", type=int, help="Process only first N documents")
 @click.option("--export", type=click.Path(), help="Export suggestions to file (JSON)")
 @click.option(
+    "--batch-size",
+    type=click.IntRange(min=1),
+    default=10,
+    show_default=True,
+    help="Process documents in batches of this size",
+)
+@click.option(
     "--yes",
     "-y",
     is_flag=True,
@@ -104,7 +111,7 @@ def list_inbox(output):
     is_flag=True,
     help="Include all inbox documents, even if already parsed",
 )
-def analyze(doc_id, output, limit, export, yes, debug, reprocess_stale, reprocess_all):
+def analyze(doc_id, output, limit, export, batch_size, yes, debug, reprocess_stale, reprocess_all):
     """Analyze inbox documents and suggest categorizations."""
     try:
         if reprocess_stale and reprocess_all:
@@ -153,48 +160,68 @@ def analyze(doc_id, output, limit, export, yes, debug, reprocess_stale, reproces
             console.print("[yellow]No documents to analyze[/yellow]")
             return
 
-        # Analyze documents
-        suggestions = []
-        with console.status("[bold green]Analyzing documents...") as status:
-            for i, doc in enumerate(documents, 1):
-                status.update(f"[bold green]Analyzing document {i}/{len(documents)}...")
-                suggestion = engine.categorize_document(doc)
-                if debug and engine.last_agent_result:
-                    print_agent_debug_traces(
-                        console,
-                        engine.last_agent_result.debug_traces,
-                        document_id=doc.id,
+        all_suggestions = []
+        total_batches = (len(documents) + batch_size - 1) // batch_size
+
+        for batch_start in range(0, len(documents), batch_size):
+            batch_documents = documents[batch_start : batch_start + batch_size]
+            batch_number = (batch_start // batch_size) + 1
+
+            if total_batches > 1:
+                console.print(
+                    f"\n[bold]Processing batch {batch_number}/{total_batches} "
+                    f"({len(batch_documents)} document(s))[/bold]"
+                )
+
+            engine.new_entities_found = {"correspondents": {}}
+
+            # Analyze documents
+            suggestions = []
+            with console.status("[bold green]Analyzing documents...") as status:
+                for i, doc in enumerate(batch_documents, 1):
+                    status.update(f"[bold green]Analyzing document {i}/{len(batch_documents)}...")
+                    suggestion = engine.categorize_document(doc)
+                    if debug and engine.last_agent_result:
+                        print_agent_debug_traces(
+                            console,
+                            engine.last_agent_result.debug_traces,
+                            document_id=doc.id,
+                        )
+                    suggestions.append(suggestion)
+
+            # Display results
+            if output == "json":
+                console.print(
+                    json.dumps([s.model_dump() for s in suggestions], indent=2, default=str)
+                )
+            else:
+                for suggestion in suggestions:
+                    _display_suggestion(suggestion)
+
+            has_new_entities = engine.new_entities_found and any(engine.new_entities_found.values())
+            if has_new_entities:
+                _show_new_entities_review(engine.new_entities_found)
+
+            prompt = "\nApply categorization suggestions to documents?"
+            if total_batches > 1:
+                prompt = f"\nApply categorization suggestions for batch {batch_number}?"
+
+            if suggestions and _confirm_or_yes(prompt, yes=yes):
+                if has_new_entities:
+                    created = _create_new_entities(engine, engine.new_entities_found)
+                    console.print(
+                        f"[green]✓[/green] Created {created['correspondents']} new correspondent(s)"
                     )
-                suggestions.append(suggestion)
+                _apply_suggestions(engine, suggestions)
+
+            all_suggestions.extend(suggestions)
 
         # Export if requested
         if export:
             with open(export, "w") as f:
-                data = [s.model_dump() for s in suggestions]
+                data = [s.model_dump() for s in all_suggestions]
                 json.dump(data, f, indent=2, default=str)
             console.print(f"[green]✓[/green] Exported suggestions to {export}")
-
-        # Display results
-        if output == "json":
-            console.print(json.dumps([s.model_dump() for s in suggestions], indent=2, default=str))
-        else:
-            for suggestion in suggestions:
-                _display_suggestion(suggestion)
-
-        has_new_entities = engine.new_entities_found and any(engine.new_entities_found.values())
-        if has_new_entities:
-            _show_new_entities_review(engine.new_entities_found)
-
-        if suggestions and _confirm_or_yes(
-            "\nApply categorization suggestions to documents?",
-            yes=yes,
-        ):
-            if has_new_entities:
-                created = _create_new_entities(engine, engine.new_entities_found)
-                console.print(
-                    f"[green]✓[/green] Created {created['correspondents']} new correspondent(s)"
-                )
-            _apply_suggestions(engine, suggestions)
 
     except Exception as e:
         console.print(f"[red]Error:[/red] {e}")
