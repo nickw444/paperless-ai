@@ -2,6 +2,7 @@
 
 import json
 import sys
+from dataclasses import dataclass
 
 import click
 from rich.console import Console
@@ -13,6 +14,20 @@ from llm.debug import print_agent_debug_traces
 from paperless.client import PaperlessClient
 
 console = Console()
+
+
+@dataclass(frozen=True)
+class AnalyzeOptions:
+    """Options controlling one analyze command run."""
+
+    doc_id: int | None
+    output: str
+    limit: int | None
+    export: str | None
+    yes: bool
+    debug: bool
+    reprocess_stale: bool
+    reprocess_all: bool
 
 
 @click.group()
@@ -107,86 +122,36 @@ def list_inbox(output):
 def analyze(doc_id, output, limit, export, yes, debug, reprocess_stale, reprocess_all):
     """Analyze inbox documents and suggest categorizations."""
     try:
-        if reprocess_stale and reprocess_all:
-            raise click.UsageError("--reprocess-stale and --reprocess-all cannot be used together")
+        options = AnalyzeOptions(
+            doc_id=doc_id,
+            output=output,
+            limit=limit,
+            export=export,
+            yes=yes,
+            debug=debug,
+            reprocess_stale=reprocess_stale,
+            reprocess_all=reprocess_all,
+        )
+        _validate_analyze_options(options)
 
-        agent = CodexAgent(debug=debug)
+        agent = CodexAgent(debug=options.debug)
         engine = CategorizationEngine(agent=agent)
-        client = engine.paperless
 
-        # Get documents to analyze
-        if doc_id:
-            documents = [client.get_document(doc_id)]
-        else:
-            # Exclude already-tracked documents unless explicitly reprocessing.
-            excluded_tag_ids = []
-            parsed_tag_id = None
-            try:
-                # Check if tracking tags exist, but don't create them yet.
-                for tag_name in (PARSED_TAG_NAME, FAILED_TAG_NAME):
-                    tag_id = engine.get_tag_id_by_name(tag_name)
-                    if tag_id is not None:
-                        if tag_name == PARSED_TAG_NAME:
-                            parsed_tag_id = tag_id
-                        if not (reprocess_stale or reprocess_all):
-                            excluded_tag_ids.append(tag_id)
-            except Exception:
-                pass  # If we can't check, continue without filtering
-
-            documents = client.list_inbox_documents(exclude_tag_ids=excluded_tag_ids)
-            if reprocess_stale:
-                version_field_id = engine.get_processing_version_custom_field_id()
-                documents = [
-                    doc
-                    for doc in documents
-                    if _should_analyze_for_stale_reprocessing(
-                        engine,
-                        doc,
-                        parsed_tag_id,
-                        version_field_id,
-                    )
-                ]
-            if limit:
-                documents = documents[:limit]
+        documents = _select_documents_for_analysis(engine, options)
 
         if not documents:
             console.print("[yellow]No documents to analyze[/yellow]")
             return
 
-        # Analyze documents
-        suggestions = []
-        with console.status("[bold green]Analyzing documents...") as status:
-            for i, doc in enumerate(documents, 1):
-                status.update(f"[bold green]Analyzing document {i}/{len(documents)}...")
-                suggestion = engine.categorize_document(doc)
-                if debug and engine.last_agent_result:
-                    print_agent_debug_traces(
-                        console,
-                        engine.last_agent_result.debug_traces,
-                        document_id=doc.id,
-                    )
-                suggestions.append(suggestion)
-
-        # Export if requested
-        if export:
-            with open(export, "w") as f:
-                data = [s.model_dump() for s in suggestions]
-                json.dump(data, f, indent=2, default=str)
-            console.print(f"[green]✓[/green] Exported suggestions to {export}")
-
-        # Display results
-        if output == "json":
-            console.print(json.dumps([s.model_dump() for s in suggestions], indent=2, default=str))
-        else:
-            for suggestion in suggestions:
-                _display_suggestion(suggestion)
+        suggestions = _analyze_documents(engine, documents, debug=options.debug)
+        _output_suggestions(suggestions, options)
 
         _review_new_entities_and_apply(
             engine,
             documents,
             suggestions,
-            yes=yes,
-            debug=debug,
+            yes=options.yes,
+            debug=options.debug,
         )
 
     except Exception as e:
@@ -202,6 +167,84 @@ def _confirm_or_yes(prompt: str, *, yes: bool, confirm=click.confirm) -> bool:
     if yes:
         return True
     return confirm(prompt)
+
+
+def _validate_analyze_options(options: AnalyzeOptions) -> None:
+    """Validate incompatible analyze options."""
+    if options.reprocess_stale and options.reprocess_all:
+        raise click.UsageError("--reprocess-stale and --reprocess-all cannot be used together")
+
+
+def _select_documents_for_analysis(engine, options: AnalyzeOptions):
+    """Return the documents that should be analyzed for this run."""
+    client = engine.paperless
+
+    if options.doc_id:
+        return [client.get_document(options.doc_id)]
+
+    excluded_tag_ids = []
+    parsed_tag_id = None
+    try:
+        # Check if tracking tags exist, but don't create them yet.
+        for tag_name in (PARSED_TAG_NAME, FAILED_TAG_NAME):
+            tag_id = engine.get_tag_id_by_name(tag_name)
+            if tag_id is not None:
+                if tag_name == PARSED_TAG_NAME:
+                    parsed_tag_id = tag_id
+                if not (options.reprocess_stale or options.reprocess_all):
+                    excluded_tag_ids.append(tag_id)
+    except Exception:
+        pass  # If we can't check, continue without filtering
+
+    documents = client.list_inbox_documents(exclude_tag_ids=excluded_tag_ids)
+    if options.reprocess_stale:
+        version_field_id = engine.get_processing_version_custom_field_id()
+        documents = [
+            doc
+            for doc in documents
+            if _should_analyze_for_stale_reprocessing(
+                engine,
+                doc,
+                parsed_tag_id,
+                version_field_id,
+            )
+        ]
+    if options.limit:
+        documents = documents[: options.limit]
+
+    return documents
+
+
+def _analyze_documents(engine, documents, *, debug: bool):
+    """Categorize each document and return the resulting suggestions."""
+    suggestions = []
+    with console.status("[bold green]Analyzing documents...") as status:
+        for i, doc in enumerate(documents, 1):
+            status.update(f"[bold green]Analyzing document {i}/{len(documents)}...")
+            suggestion = engine.categorize_document(doc)
+            if debug and engine.last_agent_result:
+                print_agent_debug_traces(
+                    console,
+                    engine.last_agent_result.debug_traces,
+                    document_id=doc.id,
+                )
+            suggestions.append(suggestion)
+    return suggestions
+
+
+def _output_suggestions(suggestions, options: AnalyzeOptions) -> None:
+    """Export and display suggestions for review."""
+    if options.export:
+        with open(options.export, "w") as f:
+            data = [s.model_dump() for s in suggestions]
+            json.dump(data, f, indent=2, default=str)
+        console.print(f"[green]✓[/green] Exported suggestions to {options.export}")
+
+    if options.output == "json":
+        console.print(json.dumps([s.model_dump() for s in suggestions], indent=2, default=str))
+    else:
+        for suggestion in suggestions:
+            _display_suggestion(suggestion)
 
 
 def _review_new_entities_and_apply(
