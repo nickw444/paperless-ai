@@ -2,7 +2,6 @@
 
 import json
 import sys
-from dataclasses import dataclass
 
 import click
 from rich.console import Console
@@ -14,20 +13,6 @@ from llm.debug import print_agent_debug_traces
 from paperless.client import PaperlessClient
 
 console = Console()
-
-
-@dataclass(frozen=True)
-class AnalyzeOptions:
-    """Options controlling one analyze command run."""
-
-    doc_id: int | None
-    output: str
-    limit: int | None
-    export: str | None
-    yes: bool
-    debug: bool
-    reprocess_stale: bool
-    reprocess_all: bool
 
 
 @click.group()
@@ -122,34 +107,33 @@ def list_inbox(output):
 def analyze(doc_id, output, limit, export, yes, debug, reprocess_stale, reprocess_all):
     """Analyze inbox documents and suggest categorizations."""
     try:
-        options = AnalyzeOptions(
-            doc_id=doc_id,
-            output=output,
-            limit=limit,
-            export=export,
-            yes=yes,
-            debug=debug,
+        _validate_analyze_options(
             reprocess_stale=reprocess_stale,
             reprocess_all=reprocess_all,
         )
-        _validate_analyze_options(options)
 
-        agent = CodexAgent(debug=options.debug)
+        agent = CodexAgent(debug=debug)
         engine = CategorizationEngine(agent=agent)
 
-        documents = _select_documents_for_analysis(engine, options)
+        documents = _select_documents_for_analysis(
+            engine,
+            doc_id=doc_id,
+            limit=limit,
+            reprocess_stale=reprocess_stale,
+            reprocess_all=reprocess_all,
+        )
 
         if not documents:
             console.print("[yellow]No documents to analyze[/yellow]")
             return
 
-        suggestions = _analyze_documents(engine, documents, debug=options.debug)
-        _output_suggestions(suggestions, options)
+        suggestions = _analyze_documents(engine, documents, debug=debug)
+        _output_suggestions(suggestions, output=output, export=export)
 
         _review_new_entities_and_apply(
             engine,
             suggestions,
-            yes=options.yes,
+            yes=yes,
         )
 
     except Exception as e:
@@ -167,18 +151,25 @@ def _confirm_or_yes(prompt: str, *, yes: bool, confirm=click.confirm) -> bool:
     return confirm(prompt)
 
 
-def _validate_analyze_options(options: AnalyzeOptions) -> None:
+def _validate_analyze_options(*, reprocess_stale: bool, reprocess_all: bool) -> None:
     """Validate incompatible analyze options."""
-    if options.reprocess_stale and options.reprocess_all:
+    if reprocess_stale and reprocess_all:
         raise click.UsageError("--reprocess-stale and --reprocess-all cannot be used together")
 
 
-def _select_documents_for_analysis(engine, options: AnalyzeOptions):
+def _select_documents_for_analysis(
+    engine,
+    *,
+    doc_id: int | None,
+    limit: int | None,
+    reprocess_stale: bool,
+    reprocess_all: bool,
+):
     """Return the documents that should be analyzed for this run."""
     client = engine.paperless
 
-    if options.doc_id:
-        return [client.get_document(options.doc_id)]
+    if doc_id:
+        return [client.get_document(doc_id)]
 
     excluded_tag_ids = []
     parsed_tag_id = None
@@ -189,13 +180,13 @@ def _select_documents_for_analysis(engine, options: AnalyzeOptions):
             if tag_id is not None:
                 if tag_name == PARSED_TAG_NAME:
                     parsed_tag_id = tag_id
-                if not (options.reprocess_stale or options.reprocess_all):
+                if not (reprocess_stale or reprocess_all):
                     excluded_tag_ids.append(tag_id)
     except Exception:
         pass  # If we can't check, continue without filtering
 
     documents = client.list_inbox_documents(exclude_tag_ids=excluded_tag_ids)
-    if options.reprocess_stale:
+    if reprocess_stale:
         version_field_id = engine.get_processing_version_custom_field_id()
         documents = [
             doc
@@ -207,8 +198,8 @@ def _select_documents_for_analysis(engine, options: AnalyzeOptions):
                 version_field_id,
             )
         ]
-    if options.limit:
-        documents = documents[: options.limit]
+    if limit:
+        documents = documents[:limit]
 
     return documents
 
@@ -230,15 +221,15 @@ def _analyze_documents(engine, documents, *, debug: bool):
     return suggestions
 
 
-def _output_suggestions(suggestions, options: AnalyzeOptions) -> None:
+def _output_suggestions(suggestions, *, output: str, export: str | None) -> None:
     """Export and display suggestions for review."""
-    if options.export:
-        with open(options.export, "w") as f:
+    if export:
+        with open(export, "w") as f:
             data = [s.model_dump() for s in suggestions]
             json.dump(data, f, indent=2, default=str)
-        console.print(f"[green]✓[/green] Exported suggestions to {options.export}")
+        console.print(f"[green]✓[/green] Exported suggestions to {export}")
 
-    if options.output == "json":
+    if output == "json":
         console.print(json.dumps([s.model_dump() for s in suggestions], indent=2, default=str))
     else:
         for suggestion in suggestions:
