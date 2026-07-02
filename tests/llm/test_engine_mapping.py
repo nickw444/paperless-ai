@@ -270,6 +270,42 @@ def test_engine_excludes_lifecycle_tags_from_agent_options_and_current_metadata(
     ]
 
 
+def test_engine_excludes_lifecycle_tags_from_suggestion_current_names():
+    agent = StubAgent(
+        AgentCategorizationResult(
+            output=CategorizationAgentOutput(
+                title="Invoice",
+                document_type_id=10,
+                tag_ids=[1, 2],
+                correspondent_id=None,
+                new_correspondent_name=None,
+                storage_path_id=None,
+            )
+        )
+    )
+    engine = CategorizationEngine(agent=agent)
+    engine.paperless = StubPaperless()
+    engine._tags = [
+        Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
+        Tag(id=2, name="financial", slug="financial"),
+        Tag(id=3, name="paperless-ai-parsed", slug="paperless-ai-parsed"),
+        Tag(id=4, name="paperless-ai-failed", slug="paperless-ai-failed"),
+    ]
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    document = _make_document()
+    document.tags = [1, 3, 2, 4]
+
+    suggestion = engine.categorize_document(document)
+
+    assert suggestion.current_tags == [1, 3, 2, 4]
+    assert suggestion.current_tag_names == ["Inbox", "financial"]
+    assert suggestion.suggested_tag_ids == [1, 2]
+    assert suggestion.suggested_tags == ["Inbox", "financial"]
+
+
 def test_engine_removes_lifecycle_tags_from_agent_suggestions():
     agent = StubAgent(
         AgentCategorizationResult(

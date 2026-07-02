@@ -91,7 +91,7 @@ class CategorizationEngine:
         """Get IDs for lifecycle tags managed by paperless-ai itself."""
         managed_ids = []
         for tag in self._tags:
-            if tag.name.lower() in ENGINE_MANAGED_TAG_NAMES:
+            if self._is_tracking_tag(tag):
                 managed_ids.append(tag.id)
         return managed_ids
 
@@ -206,9 +206,15 @@ class CategorizationEngine:
         # Load metadata if not already loaded
         self._load_metadata()
 
+        engine_managed_tag_ids = self._get_engine_managed_tag_ids()
+        current_user_tag_ids = self._filter_engine_managed_tag_ids(
+            document.tags,
+            engine_managed_tag_ids,
+        )
+
         # Get current metadata names
         current_type_name = self._get_type_name(document.document_type)
-        current_tag_names = self._get_tag_names(document.tags)
+        current_tag_names = self._get_tag_names(current_user_tag_ids)
         current_correspondent_name = self._get_correspondent_name(document.correspondent)
         current_storage_path_name = self._get_storage_path_name(document.storage_path)
         attachment = self.paperless.download_document_attachment(document)
@@ -233,7 +239,6 @@ class CategorizationEngine:
 
         pending_new_correspondents = list(self.new_entities_found["correspondents"].keys())
         protected_tag_ids = self._get_protected_tag_ids()
-        engine_managed_tag_ids = self._get_engine_managed_tag_ids()
         omitted_tag_ids = set(protected_tag_ids) | set(engine_managed_tag_ids)
 
         available_options = AvailableOptions(
@@ -253,9 +258,7 @@ class CategorizationEngine:
         current_metadata = CurrentMetadata(
             title=document.title,
             document_type=self._to_entity_option(document.document_type, self._document_types),
-            tags=self._get_tag_options(
-                [tag_id for tag_id in document.tags if tag_id not in engine_managed_tag_ids]
-            ),
+            tags=self._get_tag_options(current_user_tag_ids),
             correspondent=self._to_entity_option(document.correspondent, self._correspondents),
             storage_path=self._to_entity_option(document.storage_path, self._storage_paths),
         )
@@ -317,16 +320,17 @@ class CategorizationEngine:
 
         suggested_type_id = output.document_type_id
         suggested_type_name = self._get_type_name(suggested_type_id)
-        suggested_tag_ids = [
-            tag_id for tag_id in output.tag_ids if tag_id not in engine_managed_tag_ids
-        ]
+        suggested_tag_ids = self._filter_engine_managed_tag_ids(
+            output.tag_ids,
+            engine_managed_tag_ids,
+        )
 
         for protected_tag_id in protected_tag_ids:
             if protected_tag_id in document.tags and protected_tag_id not in suggested_tag_ids:
                 suggested_tag_ids.append(protected_tag_id)
 
-        if set(document.tags) == set(suggested_tag_ids):
-            suggested_tag_ids = list(document.tags)
+        if set(current_user_tag_ids) == set(suggested_tag_ids):
+            suggested_tag_ids = list(current_user_tag_ids)
 
         if output.correspondent_id is not None:
             if is_pending_correspondent_id(output.correspondent_id):
@@ -483,6 +487,15 @@ class CategorizationEngine:
                     options.append(EntityOption(id=tag.id, name=tag.name))
                     break
         return options
+
+    def _filter_engine_managed_tag_ids(
+        self,
+        tag_ids: list[int],
+        engine_managed_tag_ids: list[int],
+    ) -> list[int]:
+        """Remove lifecycle tag IDs while preserving tag order."""
+        managed_ids = set(engine_managed_tag_ids)
+        return [tag_id for tag_id in tag_ids if tag_id not in managed_ids]
 
     def _get_type_name(self, type_id: int | None) -> str | None:
         """Get document type name from ID."""
