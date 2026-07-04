@@ -24,9 +24,7 @@ def test_build_categorization_prompt_puts_instructions_before_data():
     prompt = build_categorization_prompt(
         content="Invoice total $42",
         available_options=AvailableOptions(
-            document_types=[
-                GuidedEntityOption(id=1, name="Bill", use_when="Payment requested")
-            ],
+            document_types=[GuidedEntityOption(id=1, name="Bill", use_when="Payment requested")],
         ),
         current_metadata=_sample_current_metadata(),
     )
