@@ -52,6 +52,24 @@ def test_load_metadata_guidance_rejects_invalid_root(tmp_path: Path):
         load_metadata_guidance(path)
 
 
+def test_load_metadata_guidance_rejects_invalid_empty_section(tmp_path: Path):
+    path = tmp_path / "metadata_guidance.yaml"
+    path.write_text("tags: []\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="section 'tags' must be a mapping"):
+        load_metadata_guidance(path)
+
+
+def test_load_metadata_guidance_allows_null_sections(tmp_path: Path):
+    path = tmp_path / "metadata_guidance.yaml"
+    path.write_text("tags:\ndocument_types:\n", encoding="utf-8")
+
+    guidance = load_metadata_guidance(path)
+
+    assert guidance.tags == {}
+    assert guidance.document_types == {}
+
+
 def test_load_metadata_guidance_requires_sectioned_format(tmp_path: Path):
     path = tmp_path / "metadata_guidance.yaml"
     path.write_text("Tax Deduction:\n  use_when: Legacy flat format\n", encoding="utf-8")

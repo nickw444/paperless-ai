@@ -55,8 +55,8 @@ def load_metadata_guidance(path: Path) -> MetadataGuidance:
         raise ValueError(f"Metadata guidance file must be a mapping: {path}")
 
     if "tags" in raw or "document_types" in raw:
-        tags_section = raw.get("tags") or {}
-        document_types_section = raw.get("document_types") or {}
+        tags_section = raw.get("tags", {})
+        document_types_section = raw.get("document_types", {})
     else:
         raise ValueError(
             f"Metadata guidance file must contain 'tags' and/or 'document_types' sections: {path}"
