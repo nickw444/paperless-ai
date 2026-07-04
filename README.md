@@ -97,6 +97,11 @@ Process documents in batches:
 python main.py analyze --limit 10
 ```
 
+Analyze documents matching a Paperless query, including non-inbox documents:
+```bash
+python main.py analyze --query "tag:Bill" --limit 10
+```
+
 Analyze a specific document:
 ```bash
 python main.py analyze --id 123
@@ -130,7 +135,7 @@ python main.py analyze --export suggestions.json
 - **LLM OCR content**: Optionally applies Codex-produced replacement document content
 - **Batch processing**: Process documents incrementally with `--limit`
 - **Incremental workflow**: Already-processed documents are automatically excluded
-- **Backfill workflow**: Reprocess stale or all parsed inbox documents with explicit flags
+- **Backfill workflow**: Reprocess stale or all parsed inbox documents with explicit flags, or target documents with a Paperless query
 - **Processing metadata**: Writes model, processing version, and token JSON to Paperless custom fields
 - **Processing delay**: Optionally delay between document analyses with `PROCESSING_DELAY_BETWEEN_DOCUMENTS_SECONDS`
 - **Protected tag preservation**: Keeps configured protected tags for manual review workflows

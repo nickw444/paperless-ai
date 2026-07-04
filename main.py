@@ -129,7 +129,7 @@ def analyze(
     reprocess_all,
     query,
 ):
-    """Analyze inbox documents and suggest categorizations."""
+    """Analyze documents and suggest categorizations."""
     try:
         if reprocess_stale and reprocess_all:
             raise click.UsageError("--reprocess-stale and --reprocess-all cannot be used together")
@@ -174,8 +174,9 @@ def analyze(
                         version_field_id,
                     )
                 ]
-            if limit:
-                documents = documents[:limit]
+
+        if limit:
+            documents = documents[:limit]
 
         if not documents:
             console.print("[yellow]No documents to analyze[/yellow]")
