@@ -1,8 +1,0 @@
-tags:
-  financial:
-    use_when: Financial documents and invoices.
-
-document_types:
-  Invoice:
-    use_when: Invoices and bills requesting payment.
-    avoid_when: Proof of payment already made.

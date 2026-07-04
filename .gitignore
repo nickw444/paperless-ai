@@ -12,7 +12,6 @@ wheels/
 # Environment variables
 .env
 /config.yaml
-/metadata_guidance.yaml
 
 # IDE
 .vscode/
