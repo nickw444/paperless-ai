@@ -186,7 +186,7 @@ class CategorizationEngine:
         return self._processing_custom_field_ids(create=True)
 
     def get_processing_version_custom_field_id(self) -> int | None:
-        """Return the processing version custom field ID if it exists."""
+        """Return the backfill comparison marker custom field ID if it exists."""
         return self._processing_custom_field_ids(create=False).get("version")
 
     def processing_metadata_for_result(
@@ -225,7 +225,7 @@ class CategorizationEngine:
         document: Document,
         version_field_id: int | None = None,
     ) -> bool:
-        """Return whether a document's stored processing version differs from config."""
+        """Return whether a document's stored backfill comparison marker differs from config."""
         field_id = version_field_id
         if field_id is None:
             field_id = self.get_processing_version_custom_field_id()
