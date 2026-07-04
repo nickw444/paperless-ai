@@ -46,13 +46,13 @@ class CodexAgent:
     """Client wrapper around the Codex CLI."""
 
     def __init__(self, *, debug: bool = False, max_retries: int = 3):
-        self.timeout = settings.codex_timeout
-        self.max_content_chars = settings.codex_max_content_chars
+        self.timeout = settings.codex.timeout
+        self.max_content_chars = settings.codex.max_content_chars
         self.max_retries = max_retries
         self.debug = debug
-        self.command = settings.codex_command
-        self.model = settings.codex_model
-        self.reasoning_effort = settings.codex_reasoning_effort
+        self.command = settings.codex.command
+        self.model = settings.codex.model
+        self.reasoning_effort = settings.codex.reasoning_effort
 
     def categorize_document(
         self,

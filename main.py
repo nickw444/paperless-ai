@@ -184,7 +184,7 @@ def analyze(
 
         all_suggestions = []
         total_batches = (len(documents) + batch_size - 1) // batch_size
-        processing_delay_seconds = settings.processing_delay_between_documents_seconds
+        processing_delay_seconds = settings.processing.delay_between_documents_seconds
         documents_analyzed = 0
 
         for batch_start in range(0, len(documents), batch_size):

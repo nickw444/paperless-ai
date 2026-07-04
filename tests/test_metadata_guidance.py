@@ -6,7 +6,7 @@ import pytest
 
 from config.metadata_guidance import (
     build_guided_options,
-    load_metadata_guidance,
+    load_metadata_guidance_from_mapping,
     unknown_guidance_names,
     warn_unknown_guidance_names,
 )
@@ -14,26 +14,29 @@ from llm.prompts import build_categorization_prompt
 from llm.schemas import AvailableOptions, CurrentMetadata, GuidedEntityOption
 
 
-def test_load_metadata_guidance_parses_tags_document_types_and_storage_paths(tmp_path: Path):
-    path = tmp_path / "metadata_guidance.yaml"
-    path.write_text(
-        """
-tags:
-  Tax Deduction:
-    use_when: Actual deductible expenses
-    avoid_when: Routine Tax Invoice bills
-document_types:
-  Bill:
-    use_when: Payment requested
-storage_paths:
-  Nick:
-    use_when: Documents addressed to Nick
-    avoid_when: Shared household documents
-""".strip(),
-        encoding="utf-8",
+def test_load_metadata_guidance_parses_tags_document_types_and_storage_paths():
+    guidance = load_metadata_guidance_from_mapping(
+        {
+            "tags": {
+                "Tax Deduction": {
+                    "use_when": "Actual deductible expenses",
+                    "avoid_when": "Routine Tax Invoice bills",
+                },
+            },
+            "document_types": {
+                "Bill": {
+                    "use_when": "Payment requested",
+                },
+            },
+            "storage_paths": {
+                "Nick": {
+                    "use_when": "Documents addressed to Nick",
+                    "avoid_when": "Shared household documents",
+                },
+            },
+        },
+        path=Path("config.yaml"),
     )
-
-    guidance = load_metadata_guidance(path)
 
     assert "tax deduction" in guidance.tags
     assert guidance.tags["tax deduction"].name == "Tax Deduction"
@@ -45,50 +48,32 @@ storage_paths:
     assert guidance.storage_paths["nick"].entry.avoid_when == "Shared household documents"
 
 
-def test_load_metadata_guidance_returns_empty_when_missing(tmp_path: Path):
-    guidance = load_metadata_guidance(tmp_path / "missing.yaml")
-    assert guidance.tags == {}
-    assert guidance.document_types == {}
-    assert guidance.storage_paths == {}
-
-
-def test_load_metadata_guidance_rejects_invalid_root(tmp_path: Path):
-    path = tmp_path / "metadata_guidance.yaml"
-    path.write_text("- not a mapping\n", encoding="utf-8")
-
-    with pytest.raises(ValueError, match="must be a mapping"):
-        load_metadata_guidance(path)
-
-
-def test_load_metadata_guidance_rejects_invalid_empty_section(tmp_path: Path):
-    path = tmp_path / "metadata_guidance.yaml"
-    path.write_text("tags: []\n", encoding="utf-8")
-
+def test_load_metadata_guidance_rejects_invalid_empty_section():
     with pytest.raises(ValueError, match="section 'tags' must be a mapping"):
-        load_metadata_guidance(path)
+        load_metadata_guidance_from_mapping({"tags": []}, path=Path("config.yaml"))
 
 
-def test_load_metadata_guidance_allows_null_sections(tmp_path: Path):
-    path = tmp_path / "metadata_guidance.yaml"
-    path.write_text("tags:\ndocument_types:\n", encoding="utf-8")
-
-    guidance = load_metadata_guidance(path)
+def test_load_metadata_guidance_allows_null_sections():
+    guidance = load_metadata_guidance_from_mapping(
+        {"tags": None, "document_types": None, "storage_paths": None},
+        path=Path("config.yaml"),
+    )
 
     assert guidance.tags == {}
     assert guidance.document_types == {}
     assert guidance.storage_paths == {}
 
 
-def test_load_metadata_guidance_requires_sectioned_format(tmp_path: Path):
-    path = tmp_path / "metadata_guidance.yaml"
-    path.write_text("Tax Deduction:\n  use_when: Legacy flat format\n", encoding="utf-8")
-
+def test_load_metadata_guidance_requires_sectioned_format():
     with pytest.raises(ValueError, match="tags.*document_types.*storage_paths"):
-        load_metadata_guidance(path)
+        load_metadata_guidance_from_mapping(
+            {"Tax Deduction": {"use_when": "Deductible expenses"}},
+            path=Path("config.yaml"),
+        )
 
 
 def test_build_guided_options_matches_available_entities_only():
-    guidance = load_metadata_guidance_from_mapping(
+    guidance = build_metadata_guidance(
         tags={
             "Tax Deduction": {
                 "use_when": "Deductible expenses",
@@ -113,7 +98,7 @@ def test_build_guided_options_matches_available_entities_only():
 
 
 def test_unknown_guidance_names_reports_missing_paperless_entities():
-    guidance = load_metadata_guidance_from_mapping(
+    guidance = build_metadata_guidance(
         tags={
             "Tax Deduction": {"use_when": "Deductible expenses"},
             "Old Tag": {"use_when": "No longer exists"},
@@ -127,7 +112,7 @@ def test_unknown_guidance_names_reports_missing_paperless_entities():
 
 
 def test_warn_unknown_guidance_names_prints_warning(capsys, tmp_path: Path):
-    guidance = load_metadata_guidance_from_mapping(
+    guidance = build_metadata_guidance(
         tags={"Stale Tag": {"use_when": "Gone"}},
         document_types={},
     )
@@ -135,17 +120,17 @@ def test_warn_unknown_guidance_names_prints_warning(capsys, tmp_path: Path):
     warn_unknown_guidance_names(
         guidance.tags,
         ["Utilities"],
-        path=tmp_path / "metadata_guidance.yaml",
+        path=tmp_path / "config.yaml",
         label="tags",
     )
 
     captured = capsys.readouterr()
     assert "Stale Tag" in captured.err
-    assert "metadata_guidance.yaml" in captured.err
+    assert "config.yaml" in captured.err
 
 
 def test_warn_unknown_storage_path_guidance_names_prints_warning(capsys, tmp_path: Path):
-    guidance = load_metadata_guidance_from_mapping(
+    guidance = build_metadata_guidance(
         tags={},
         document_types={},
         storage_paths={"Old Person": {"use_when": "No longer exists"}},
@@ -154,7 +139,7 @@ def test_warn_unknown_storage_path_guidance_names_prints_warning(capsys, tmp_pat
     warn_unknown_guidance_names(
         guidance.storage_paths,
         ["Nick"],
-        path=tmp_path / "metadata_guidance.yaml",
+        path=tmp_path / "config.yaml",
         label="storage_paths",
     )
 
@@ -206,28 +191,19 @@ def test_build_categorization_prompt_embeds_storage_path_guidance_in_available_o
     assert "available_options.storage_paths may be used" in prompt
 
 
-def load_metadata_guidance_from_mapping(
+def build_metadata_guidance(
     *,
     tags: dict,
     document_types: dict | None = None,
     storage_paths: dict | None = None,
 ):
-    from config.metadata_guidance import MetadataGuidance, _parse_guidance_section
+    from config.metadata_guidance import load_metadata_guidance_from_mapping as load_guidance
 
-    return MetadataGuidance(
-        tags=_parse_guidance_section(
-            tags,
-            path=Path("metadata_guidance.yaml"),
-            section_name="tags",
-        ),
-        document_types=_parse_guidance_section(
-            document_types or {},
-            path=Path("metadata_guidance.yaml"),
-            section_name="document_types",
-        ),
-        storage_paths=_parse_guidance_section(
-            storage_paths or {},
-            path=Path("metadata_guidance.yaml"),
-            section_name="storage_paths",
-        ),
+    return load_guidance(
+        {
+            "tags": tags,
+            "document_types": document_types or {},
+            "storage_paths": storage_paths or {},
+        },
+        path=Path("config.yaml"),
     )

@@ -1,0 +1,43 @@
+# Paperless-AI application configuration.
+# Copy this file to config.yaml and keep private tokens in .env.
+
+paperless:
+  url: https://your-paperless-instance.com
+
+codex:
+  command: codex
+  model: gpt-5
+  timeout: 120
+  max_content_chars: 2000
+  reasoning_effort: minimal
+
+processing:
+  delay_between_documents_seconds: 0
+  backfill_comparison_version: "1"
+
+attachments:
+  enabled: true
+  max_bytes: 20000000
+  supported_mime_types:
+    - application/pdf
+    - image/jpeg
+    - image/png
+
+protected_tags:
+  - Inbox
+  - From Email
+  - Tax Deduction
+
+metadata_guidance:
+  tags:
+    Example Tag:
+      use_when: When the document clearly matches this tag.
+      avoid_when: When the tag would only apply incidentally.
+  document_types:
+    Example Type:
+      use_when: When the document fits this category.
+      avoid_when: When another document type is a better fit.
+  storage_paths:
+    Example Path:
+      use_when: When documents should be stored in this Paperless path.
+      avoid_when: When another storage path is more appropriate.

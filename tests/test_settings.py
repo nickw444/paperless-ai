@@ -1,52 +1,155 @@
 """Tests for application settings parsing."""
 
-from config.settings import Settings
+from pathlib import Path
+
+import pytest
+
+from config.settings import AttachmentSettings, Settings, load_settings
 
 
-def test_supported_attachment_mime_types_parse_from_comma_separated_string():
+def test_supported_attachment_mime_types_are_normalized_from_yaml_list():
+    settings = AttachmentSettings(
+        supported_mime_types=[" application/pdf ", "IMAGE/PNG", ""],
+    )
+
+    assert settings.supported_mime_types == ["application/pdf", "image/png"]
+
+
+def test_protected_tags_are_normalized_from_yaml_list():
     settings = Settings(
-        paperless_url="http://paperless.example",
-        paperless_api_token="token",
-        supported_attachment_mime_types="application/pdf, image/png",
+        paperless={
+            "url": "http://paperless.example",
+            "api_token": "token",
+        },
+        protected_tags=[" Inbox ", "From Email", "Tax Deduction", ""],
     )
 
-    assert settings.parsed_supported_attachment_mime_types == ["application/pdf", "image/png"]
+    assert settings.protected_tags == ["Inbox", "From Email", "Tax Deduction"]
 
 
-def test_protected_tags_parse_from_comma_separated_string():
+def test_backfill_comparison_version_defaults_to_initial_marker():
     settings = Settings(
-        paperless_url="http://paperless.example",
-        paperless_api_token="token",
-        protected_tags="Inbox, From Email, Tax Deduction",
+        paperless={
+            "url": "http://paperless.example",
+            "api_token": "token",
+        },
     )
 
-    assert settings.parsed_protected_tags == ["Inbox", "From Email", "Tax Deduction"]
+    assert settings.processing.backfill_comparison_version == "1"
 
 
-def test_processing_metadata_settings_have_hyphenated_defaults():
-    assert Settings.model_fields["paperless_ai_processing_version"].default == "1"
-    assert (
-        Settings.model_fields["paperless_ai_version_field_name"].default == "paperless-ai-version"
-    )
-    assert Settings.model_fields["paperless_ai_model_field_name"].default == "paperless-ai-model"
-    assert Settings.model_fields["paperless_ai_tokens_field_name"].default == "paperless-ai-tokens"
-
-
-def test_processing_metadata_field_names_can_be_overridden():
+def test_backfill_comparison_version_can_be_overridden():
     settings = Settings(
-        paperless_url="http://paperless.example",
-        paperless_api_token="token",
-        paperless_ai_processing_version="2026-07",
-        paperless_ai_version_field_name="ai-version",
-        paperless_ai_model_field_name="ai-model",
-        paperless_ai_tokens_field_name="ai-tokens",
+        paperless={
+            "url": "http://paperless.example",
+            "api_token": "token",
+        },
+        processing={
+            "backfill_comparison_version": "2026-07",
+        },
     )
 
-    assert settings.paperless_ai_processing_version == "2026-07"
-    assert settings.paperless_ai_version_field_name == "ai-version"
-    assert settings.paperless_ai_model_field_name == "ai-model"
-    assert settings.paperless_ai_tokens_field_name == "ai-tokens"
+    assert settings.processing.backfill_comparison_version == "2026-07"
 
 
 def test_processing_delay_between_documents_seconds_defaults_to_disabled():
-    assert Settings.model_fields["processing_delay_between_documents_seconds"].default == 0
+    settings = Settings(
+        paperless={
+            "url": "http://paperless.example",
+            "api_token": "token",
+        },
+    )
+
+    assert settings.processing.delay_between_documents_seconds == 0
+
+
+def test_load_settings_reads_non_secret_values_from_yaml(tmp_path: Path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+paperless:
+  url: http://paperless.example/
+codex:
+  command: /usr/local/bin/codex
+  model: gpt-5.1
+  timeout: 30
+  max_content_chars: 1234
+  reasoning_effort: low
+attachments:
+  enabled: false
+  max_bytes: 42
+  supported_mime_types:
+    - application/pdf
+    - image/png
+protected_tags:
+  - Inbox
+  - Tax Deduction
+metadata_guidance:
+  tags:
+    Tax Deduction:
+      use_when: Actual deductible expenses
+      avoid_when: Routine Tax Invoice bills
+  document_types:
+    Bill:
+      use_when: Payment requested
+  storage_paths:
+    Nick:
+      use_when: Documents addressed to Nick
+processing:
+  delay_between_documents_seconds: 1.5
+  backfill_comparison_version: 2026-07
+""",
+        encoding="utf-8",
+    )
+
+    settings = load_settings(
+        config_path=config_path,
+        environ={"PAPERLESS_API_TOKEN": "token"},
+    )
+
+    assert settings.paperless.url == "http://paperless.example"
+    assert settings.paperless.api_token == "token"
+    assert settings.codex.command == "/usr/local/bin/codex"
+    assert settings.codex.model == "gpt-5.1"
+    assert settings.codex.timeout == 30
+    assert settings.codex.max_content_chars == 1234
+    assert settings.codex.reasoning_effort == "low"
+    assert settings.attachments.enabled is False
+    assert settings.attachments.max_bytes == 42
+    assert settings.attachments.supported_mime_types == ["application/pdf", "image/png"]
+    assert settings.protected_tags == ["Inbox", "Tax Deduction"]
+    assert settings.metadata_guidance.tags["tax deduction"].entry.use_when == (
+        "Actual deductible expenses"
+    )
+    assert settings.metadata_guidance.document_types["bill"].entry.use_when == "Payment requested"
+    assert settings.metadata_guidance.storage_paths["nick"].entry.use_when == (
+        "Documents addressed to Nick"
+    )
+    assert settings.processing.delay_between_documents_seconds == 1.5
+    assert settings.processing.backfill_comparison_version == "2026-07"
+
+
+def test_load_settings_keeps_paperless_token_in_environment(tmp_path: Path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text(
+        """
+paperless:
+  url: http://paperless.example
+  token: should-not-be-here
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit):
+        load_settings(
+            config_path=config_path,
+            environ={"PAPERLESS_API_TOKEN": "token"},
+        )
+
+
+def test_load_settings_requires_config_file(tmp_path: Path):
+    with pytest.raises(SystemExit):
+        load_settings(
+            config_path=tmp_path / "missing.yaml",
+            environ={"PAPERLESS_API_TOKEN": "token"},
+        )

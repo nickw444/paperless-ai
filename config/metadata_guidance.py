@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
-import yaml
 from pydantic import BaseModel, Field
 
-from llm.schemas import GuidedEntityOption
+if TYPE_CHECKING:
+    from llm.schemas import GuidedEntityOption
 
 
 class GuidanceEntry(BaseModel):
@@ -32,7 +32,7 @@ class ConfiguredGuidance(BaseModel):
 
 
 class MetadataGuidance(BaseModel):
-    """Metadata guidance loaded from a single YAML file."""
+    """Metadata guidance configured for agent prompts."""
 
     tags: dict[str, ConfiguredGuidance] = Field(default_factory=dict)
     document_types: dict[str, ConfiguredGuidance] = Field(default_factory=dict)
@@ -44,36 +44,27 @@ class NamedEntity(Protocol):
     name: str
 
 
-def load_metadata_guidance(path: Path) -> MetadataGuidance:
-    """Load metadata guidance from a YAML file."""
-    if not path.exists():
-        return MetadataGuidance()
-
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if raw is None:
-        return MetadataGuidance()
-    if not isinstance(raw, dict):
-        raise ValueError(f"Metadata guidance file must be a mapping: {path}")
-
-    if "tags" in raw or "document_types" in raw or "storage_paths" in raw:
-        tags_section = raw.get("tags", {})
-        document_types_section = raw.get("document_types", {})
-        storage_paths_section = raw.get("storage_paths", {})
-    else:
+def load_metadata_guidance_from_mapping(
+    raw: dict,
+    *,
+    path: Path,
+) -> MetadataGuidance:
+    """Load metadata guidance from a config mapping."""
+    if "tags" not in raw and "document_types" not in raw and "storage_paths" not in raw:
         raise ValueError(
-            f"Metadata guidance file must contain 'tags', 'document_types', "
+            f"Metadata guidance must contain 'tags', 'document_types', "
             f"and/or 'storage_paths' sections: {path}"
         )
 
     return MetadataGuidance(
-        tags=_parse_guidance_section(tags_section, path=path, section_name="tags"),
+        tags=_parse_guidance_section(raw.get("tags", {}), path=path, section_name="tags"),
         document_types=_parse_guidance_section(
-            document_types_section,
+            raw.get("document_types", {}),
             path=path,
             section_name="document_types",
         ),
         storage_paths=_parse_guidance_section(
-            storage_paths_section,
+            raw.get("storage_paths", {}),
             path=path,
             section_name="storage_paths",
         ),
@@ -120,6 +111,8 @@ def build_guided_options(
     guidance_by_name: dict[str, ConfiguredGuidance],
 ) -> list[GuidedEntityOption]:
     """Return only entities documented in guidance, with rules embedded."""
+    from llm.schemas import GuidedEntityOption
+
     if not guidance_by_name:
         return []
 

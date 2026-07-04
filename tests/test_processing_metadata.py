@@ -113,13 +113,13 @@ def test_token_metadata_json_omits_missing_values():
     assert _format_token_metadata_json(AgentUsageMetadata()) is None
 
 
-def test_processing_metadata_uses_configured_model_fallback():
+def test_processing_metadata_uses_configured_model_when_usage_has_no_model():
     engine = CategorizationEngine(agent=StubAgent())
 
     metadata = engine.processing_metadata_for_result(AgentCategorizationResult())
 
-    assert metadata.version == settings.paperless_ai_processing_version
-    assert metadata.model == settings.codex_model
+    assert metadata.version == settings.processing.backfill_comparison_version
+    assert metadata.model == settings.codex.model
     assert metadata.tokens is None
 
 
@@ -224,7 +224,7 @@ def test_stale_reprocessing_filter_uses_version_field_only():
     unparsed = _make_document(tags=[])
     current = _make_document(
         tags=[parsed_tag_id],
-        custom_fields=[{"field": 10, "value": settings.paperless_ai_processing_version}],
+        custom_fields=[{"field": 10, "value": settings.processing.backfill_comparison_version}],
     )
     stale = _make_document(tags=[parsed_tag_id], custom_fields=[{"field": 10, "value": "0"}])
 

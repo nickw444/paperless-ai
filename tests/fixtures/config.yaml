@@ -1,0 +1,13 @@
+paperless:
+  url: http://paperless.example
+
+metadata_guidance:
+  tags:
+    financial:
+      use_when: Financial documents and invoices.
+  document_types:
+    Invoice:
+      use_when: Invoices and bills requiring payment.
+  storage_paths:
+    Nick:
+      use_when: Documents addressed to Nick.

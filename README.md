@@ -40,66 +40,68 @@ uv sync --dev
 
 ## Configuration
 
-Create a `.env` file or set environment variables:
+Create a YAML application config:
 
 ```bash
-PAPERLESS_URL=http://your-paperless-instance
-PAPERLESS_API_TOKEN=your-api-token
-
-# Codex configuration
-CODEX_COMMAND=codex
-CODEX_MODEL=gpt-5          # Optional, defaults to gpt-5
-CODEX_TIMEOUT=120
-CODEX_MAX_CONTENT_CHARS=2000
-CODEX_REASONING_EFFORT=minimal
-
-# Processing
-PROCESSING_DELAY_BETWEEN_DOCUMENTS_SECONDS=0
-
-# Document attachments
-ENABLE_DOCUMENT_ATTACHMENTS=true
-MAX_ATTACHMENT_BYTES=20000000
-SUPPORTED_ATTACHMENT_MIME_TYPES=application/pdf,image/jpeg,image/png
-
-# Protected tags
-PROTECTED_TAGS=Inbox,From Email,Tax Deduction
-
-# Metadata guidance
-METADATA_GUIDANCE_FILE=metadata_guidance.yaml
-
-# Processing metadata custom fields
-PAPERLESS_AI_PROCESSING_VERSION=1
-PAPERLESS_AI_VERSION_FIELD_NAME=paperless-ai-version
-PAPERLESS_AI_MODEL_FIELD_NAME=paperless-ai-model
-PAPERLESS_AI_TOKENS_FIELD_NAME=paperless-ai-tokens
+cp config.example.yaml config.yaml
 ```
+
+Then edit `config.yaml`:
+
+```yaml
+paperless:
+  url: http://your-paperless-instance
+
+codex:
+  command: codex
+  model: gpt-5
+  timeout: 120
+  max_content_chars: 2000
+  reasoning_effort: minimal
+
+processing:
+  delay_between_documents_seconds: 0
+  backfill_comparison_version: "1"
+
+attachments:
+  enabled: true
+  max_bytes: 20000000
+  supported_mime_types:
+    - application/pdf
+    - image/jpeg
+    - image/png
+
+protected_tags:
+  - Inbox
+  - From Email
+  - Tax Deduction
+
+metadata_guidance:
+  tags:
+    Example Tag:
+      use_when: When the document clearly matches this tag.
+      avoid_when: When the tag would only apply incidentally.
+  document_types:
+    Example Type:
+      use_when: When the document fits this category.
+      avoid_when: When another document type is a better fit.
+  storage_paths:
+    Example Path:
+      use_when: When documents should be stored in this Paperless path.
+      avoid_when: When another storage path is more appropriate.
+```
+
+Keep private tokens in `.env` or the process environment:
+
+```bash
+PAPERLESS_API_TOKEN=your-api-token
+```
+
+`config.yaml` is loaded by default. To use a different file, set `PAPERLESS_AI_CONFIG_FILE`.
 
 ### CLI version requirements
 
 Codex responses are JSON-only, enforced by schema at invocation time. Requires Codex CLI with `exec --output-schema` support.
-
-### Metadata guidance
-
-By default, paperless-ai reads `metadata_guidance.yaml` from the project root and offers only the configured tags, document types, and storage paths to Codex. This keeps categorization choices deliberate and gives the model concrete rules for each option.
-
-Example:
-
-```yaml
-tags:
-  Tax Deduction:
-    use_when: The document supports a deductible expense claim.
-    avoid_when: The document is only a routine tax invoice or receipt.
-document_types:
-  Bill:
-    use_when: Payment is requested or due.
-storage_paths:
-  Nick:
-    use_when: The document is addressed specifically to Nick.
-    avoid_when: The document is addressed to another person or the whole household.
-  Household:
-    use_when: The document is addressed to the household, property, or multiple people.
-    avoid_when: The document clearly belongs to one named recipient.
-```
 
 ## Usage
 
@@ -133,7 +135,7 @@ Analyze a specific document:
 python main.py analyze --id 123
 ```
 
-Reprocess inbox documents whose stored paperless-ai version is stale:
+Reprocess inbox documents whose stored paperless-ai backfill comparison version differs from config:
 ```bash
 python main.py analyze --reprocess-stale
 ```
@@ -161,9 +163,9 @@ python main.py analyze --export suggestions.json
 - **LLM OCR content**: Optionally applies Codex-produced replacement document content
 - **Batch processing**: Process documents incrementally with `--limit`
 - **Incremental workflow**: Already-processed documents are automatically excluded
-- **Backfill workflow**: Reprocess stale or all parsed inbox documents with explicit flags, or target documents with a Paperless query
-- **Processing metadata**: Writes model, processing version, and token JSON to Paperless custom fields
-- **Processing delay**: Optionally delay between document analyses with `PROCESSING_DELAY_BETWEEN_DOCUMENTS_SECONDS`
+- **Backfill workflow**: Reprocess parsed documents whose stored backfill comparison version differs from config, or target documents with a Paperless query
+- **Processing metadata**: Writes model, backfill comparison marker, and token JSON to Paperless custom fields
+- **Processing delay**: Optionally delay between document analyses with `processing.delay_between_documents_seconds`
 - **Protected tag preservation**: Keeps configured protected tags for manual review workflows
 - **Lifecycle tag ownership**: Omits `paperless-ai-parsed` and `paperless-ai-failed` from agent choices
 - **JSON export**: Save suggestions for later review or automation

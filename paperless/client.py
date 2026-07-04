@@ -93,9 +93,9 @@ class PaperlessClient:
 
     def __init__(self):
         """Initialize the Paperless API client."""
-        self.base_url = settings.paperless_url
+        self.base_url = settings.paperless.url
         self.headers = {
-            "Authorization": f"Token {settings.paperless_api_token}",
+            "Authorization": f"Token {settings.paperless.api_token}",
             "Content-Type": "application/json",
         }
 
@@ -279,10 +279,10 @@ class PaperlessClient:
 
     def download_document_attachment(self, document: Document) -> DocumentAttachment | None:
         """Download the best supported document file for agent context."""
-        if not settings.enable_document_attachments:
+        if not settings.attachments.enabled:
             return None
 
-        supported_mime_types = set(settings.parsed_supported_attachment_mime_types)
+        supported_mime_types = set(settings.attachments.supported_mime_types)
         if document.mime_type is None or _is_supported_mime_type(
             document.mime_type,
             supported_mime_types,
@@ -291,7 +291,7 @@ class PaperlessClient:
                 document=document,
                 source="original",
                 params={"original": "true"},
-                fallback_filename=document.original_file_name,
+                default_filename=document.original_file_name,
                 supported_mime_types=supported_mime_types,
             )
             if attachment:
@@ -301,7 +301,7 @@ class PaperlessClient:
             document=document,
             source="archived",
             params=None,
-            fallback_filename=document.archived_file_name or document.original_file_name,
+            default_filename=document.archived_file_name or document.original_file_name,
             supported_mime_types=supported_mime_types,
         )
 
@@ -311,7 +311,7 @@ class PaperlessClient:
         document: Document,
         source: str,
         params: dict[str, str] | None,
-        fallback_filename: str,
+        default_filename: str,
         supported_mime_types: set[str],
     ) -> DocumentAttachment | None:
         try:
@@ -329,12 +329,12 @@ class PaperlessClient:
                 return None
 
             content_length = _safe_int(response.headers.get("content-length"))
-            if content_length is not None and content_length > settings.max_attachment_bytes:
+            if content_length is not None and content_length > settings.attachments.max_bytes:
                 return None
 
             filename = (
                 _filename_from_content_disposition(response.headers.get("content-disposition"))
-                or fallback_filename
+                or default_filename
             )
             suffix = _suffix_for_attachment(filename, mime_type)
             temp_file = tempfile.NamedTemporaryFile(
@@ -350,7 +350,7 @@ class PaperlessClient:
                         if not chunk:
                             continue
                         bytes_written += len(chunk)
-                        if bytes_written > settings.max_attachment_bytes:
+                        if bytes_written > settings.attachments.max_bytes:
                             return _cleanup_and_none(temp_file.name)
                         temp_file.write(chunk)
             except Exception:

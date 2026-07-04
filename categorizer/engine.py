@@ -1,13 +1,12 @@
 """Categorization engine that orchestrates document analysis."""
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 from config.metadata_guidance import (
-    MetadataGuidance,
     build_guided_options,
-    load_metadata_guidance,
     warn_unknown_guidance_names,
 )
 from config.settings import settings
@@ -36,6 +35,9 @@ from paperless.models import (
 PARSED_TAG_NAME = "paperless-ai-parsed"
 FAILED_TAG_NAME = "paperless-ai-failed"
 ENGINE_MANAGED_TAG_NAMES = {PARSED_TAG_NAME, FAILED_TAG_NAME}
+PROCESSING_VERSION_FIELD_NAME = "paperless-ai-version"
+PROCESSING_MODEL_FIELD_NAME = "paperless-ai-model"
+PROCESSING_TOKENS_FIELD_NAME = "paperless-ai-tokens"
 
 
 class CategorizationEngine:
@@ -50,9 +52,7 @@ class CategorizationEngine:
         self.paperless = PaperlessClient()
         self.agent = agent
         self.protected_tag_names = (
-            protected_tag_names
-            if protected_tag_names is not None
-            else settings.parsed_protected_tags
+            protected_tag_names if protected_tag_names is not None else settings.protected_tags
         )
         self._tags: list[Tag] | None = None
         self._correspondents: list[Correspondent] | None = None
@@ -70,24 +70,17 @@ class CategorizationEngine:
         self._storage_path_guidance_by_name = metadata_guidance.storage_paths
         self._guidance_warned = False
 
-    def _guidance_path(self) -> Path | None:
-        if not settings.metadata_guidance_file:
-            return None
-        return Path.cwd() / settings.metadata_guidance_file
+    def _guidance_path(self) -> Path:
+        return Path.cwd() / os.environ.get("PAPERLESS_AI_CONFIG_FILE", "config.yaml")
 
     def _load_metadata_guidance(self):
-        path = self._guidance_path()
-        if path is None:
-            return MetadataGuidance()
-        return load_metadata_guidance(path)
+        return settings.metadata_guidance
 
     def _warn_unknown_guidance(self) -> None:
         if self._guidance_warned:
             return
 
         path = self._guidance_path()
-        if path is None:
-            return
 
         if self._tag_guidance_by_name:
             warn_unknown_guidance_names(
@@ -202,9 +195,9 @@ class CategorizationEngine:
     ) -> ProcessingMetadata:
         """Build custom-field metadata for a successful categorization result."""
         usage = result.usage_metadata
-        model = usage.model if usage and usage.model else settings.codex_model
+        model = usage.model if usage and usage.model else settings.codex.model
         return ProcessingMetadata(
-            version=settings.paperless_ai_processing_version,
+            version=settings.processing.backfill_comparison_version,
             model=model,
             tokens=_format_token_metadata_json(usage),
         )
@@ -240,7 +233,7 @@ class CategorizationEngine:
             return True
         return (
             _document_custom_field_value(document.custom_fields, field_id)
-            != settings.paperless_ai_processing_version
+            != settings.processing.backfill_comparison_version
         )
 
     def categorize_document(self, document: Document) -> CategorizationSuggestion:
@@ -482,9 +475,9 @@ class CategorizationEngine:
     def _processing_custom_field_ids(self, *, create: bool) -> dict[str, int]:
         self._load_custom_fields()
         names = {
-            "version": settings.paperless_ai_version_field_name,
-            "model": settings.paperless_ai_model_field_name,
-            "tokens": settings.paperless_ai_tokens_field_name,
+            "version": PROCESSING_VERSION_FIELD_NAME,
+            "model": PROCESSING_MODEL_FIELD_NAME,
+            "tokens": PROCESSING_TOKENS_FIELD_NAME,
         }
         field_ids: dict[str, int] = {}
         fields_by_name = {field.name.lower(): field for field in self._custom_fields}
