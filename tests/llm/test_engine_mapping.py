@@ -274,10 +274,7 @@ def test_engine_excludes_lifecycle_tags_from_agent_options_and_current_metadata(
     engine.categorize_document(document)
 
     assert captured["options"].tags == [_FINANCIAL_GUIDED_TAG]
-    assert captured["metadata"].tags == [
-        EntityOption(id=1, name="Inbox"),
-        EntityOption(id=2, name="financial"),
-    ]
+    assert captured["metadata"].tags == [EntityOption(id=2, name="financial")]
 
 
 def test_engine_excludes_lifecycle_tags_from_suggestion_current_names():
@@ -412,9 +409,98 @@ def test_engine_forwards_current_metadata_to_agent():
     assert metadata.title == "scan.pdf"
     assert metadata.document_date.isoformat() == "2024-01-01"
     assert metadata.document_type is None
-    assert metadata.tags == [EntityOption(id=1, name="Inbox")]
+    assert metadata.tags == []
     assert metadata.correspondent is None
     assert metadata.storage_path is None
+
+
+def test_engine_excludes_guidance_hidden_current_tags_from_agent_metadata():
+    captured: dict[str, AvailableOptions | CurrentMetadata] = {}
+
+    class CapturingAgent(StubAgent):
+        def categorize_document(
+            self,
+            ocr_content: str,
+            available_options: AvailableOptions,
+            current_metadata: CurrentMetadata,
+            attachment: DocumentAttachment | None = None,
+        ):
+            del ocr_content, attachment
+            captured["options"] = available_options
+            captured["metadata"] = current_metadata
+            return AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Invoice",
+                    document_type_id=10,
+                    tag_ids=[2],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+
+    engine = CategorizationEngine(agent=CapturingAgent(AgentCategorizationResult()))
+    engine.paperless = StubPaperless()
+    engine._tags = [
+        Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
+        Tag(id=2, name="financial", slug="financial"),
+        Tag(id=3, name="Bill", slug="bill"),
+    ]
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    document = _make_document()
+    document.tags = [1, 2, 3]
+
+    engine.categorize_document(document)
+
+    assert captured["options"].tags == [_FINANCIAL_GUIDED_TAG]
+    assert captured["metadata"].tags == [EntityOption(id=2, name="financial")]
+
+
+def test_engine_excludes_guidance_hidden_current_document_type_from_agent_metadata():
+    captured: dict[str, AvailableOptions | CurrentMetadata] = {}
+
+    class CapturingAgent(StubAgent):
+        def categorize_document(
+            self,
+            ocr_content: str,
+            available_options: AvailableOptions,
+            current_metadata: CurrentMetadata,
+            attachment: DocumentAttachment | None = None,
+        ):
+            del ocr_content, attachment
+            captured["options"] = available_options
+            captured["metadata"] = current_metadata
+            return AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Invoice",
+                    document_type_id=10,
+                    tag_ids=[2],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+
+    engine = CategorizationEngine(agent=CapturingAgent(AgentCategorizationResult()))
+    engine.paperless = StubPaperless()
+    engine._tags = engine.paperless.list_tags()
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = [
+        DocumentType(id=10, name="Invoice", slug="invoice"),
+        DocumentType(id=11, name="Receipt", slug="receipt"),
+    ]
+    engine._storage_paths = engine.paperless.list_storage_paths()
+
+    document = _make_document()
+    document.document_type = 11
+
+    engine.categorize_document(document)
+
+    assert captured["options"].document_type_ids() == [10]
+    assert captured["metadata"].document_type is None
 
 
 def test_engine_includes_pending_correspondents_in_agent_options():

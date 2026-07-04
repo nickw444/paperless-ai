@@ -305,12 +305,21 @@ class CategorizationEngine:
             ),
             storage_paths=[EntityOption(id=sp.id, name=sp.name) for sp in self._storage_paths],
         )
+        visible_document_type_ids = set(available_options.document_type_ids())
+        visible_tag_ids = set(available_options.tag_ids())
+        current_visible_tag_ids = [
+            tag_id for tag_id in current_user_tag_ids if tag_id in visible_tag_ids
+        ]
 
         current_metadata = CurrentMetadata(
             title=document.title,
             document_date=document.created_date,
-            document_type=self._to_entity_option(document.document_type, self._document_types),
-            tags=self._get_tag_options(current_user_tag_ids),
+            document_type=(
+                self._to_entity_option(document.document_type, self._document_types)
+                if document.document_type in visible_document_type_ids
+                else None
+            ),
+            tags=self._get_tag_options(current_visible_tag_ids),
             correspondent=self._to_entity_option(document.correspondent, self._correspondents),
             storage_path=self._to_entity_option(document.storage_path, self._storage_paths),
         )
