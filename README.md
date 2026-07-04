@@ -71,16 +71,15 @@ attachments:
     - image/jpeg
     - image/png
 
-protected_tags:
-  - Inbox
-  - From Email
-  - Tax Deduction
-
 metadata_guidance:
   tags:
     Example Tag:
       use_when: When the document clearly matches this tag.
       avoid_when: When the tag would only apply incidentally.
+    Manual Review:
+      use_when: When the document needs human review.
+      avoid_when: When the document can be safely filed without review.
+      protected: true
   document_types:
     Example Type:
       use_when: When the document fits this category.
@@ -102,6 +101,16 @@ PAPERLESS_API_TOKEN=your-api-token
 ### CLI version requirements
 
 Codex responses are JSON-only, enforced by schema at invocation time. Requires Codex CLI with `exec --output-schema` support.
+
+### Metadata guidance
+
+paperless-ai offers only the configured tags, document types, and storage paths in
+`metadata_guidance` to Codex. This keeps categorization choices deliberate and gives
+the model concrete rules for each option.
+
+Tags marked `protected: true` are still available to Codex, so they can be added when
+relevant. If a protected tag is already present on a document, paperless-ai preserves it
+even when Codex omits it from the suggested tag IDs.
 
 ## Usage
 
@@ -166,7 +175,7 @@ python main.py analyze --export suggestions.json
 - **Backfill workflow**: Reprocess parsed documents whose stored backfill comparison version differs from config, or target documents with a Paperless query
 - **Processing metadata**: Writes model, backfill comparison marker, and token JSON to Paperless custom fields
 - **Processing delay**: Optionally delay between document analyses with `processing.delay_between_documents_seconds`
-- **Protected tag preservation**: Keeps configured protected tags for manual review workflows
+- **Protected tag preservation**: Keeps `protected: true` guided tags for manual review workflows
 - **Lifecycle tag ownership**: Omits `paperless-ai-parsed` and `paperless-ai-failed` from agent choices
 - **JSON export**: Save suggestions for later review or automation
 - **Debug mode**: Print raw agent prompts, responses, and available token/cost metadata

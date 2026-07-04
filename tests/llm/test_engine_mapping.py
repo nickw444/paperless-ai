@@ -135,8 +135,8 @@ def test_engine_maps_id_based_output_to_suggestion():
     assert suggestion.suggested_type == "Invoice"
     assert suggestion.suggested_type_id == 10
     assert suggestion.suggested_type_is_new is False
-    assert suggestion.suggested_tags == ["financial", "Inbox"]
-    assert suggestion.suggested_tag_ids == [2, 1]
+    assert suggestion.suggested_tags == ["financial"]
+    assert suggestion.suggested_tag_ids == [2]
     assert suggestion.suggested_correspondent == "Acme Corp"
     assert suggestion.suggested_correspondent_is_new is True
 
@@ -223,7 +223,7 @@ def test_engine_preserves_tag_order_when_tag_set_unchanged():
     assert suggestion.suggested_tags == ["Inbox", "financial", "From Email"]
 
 
-def test_engine_preserves_configured_protected_tags():
+def test_engine_preserves_guidance_protected_tags():
     agent = StubAgent(
         AgentCategorizationResult(
             output=CategorizationAgentOutput(
@@ -236,7 +236,7 @@ def test_engine_preserves_configured_protected_tags():
             )
         )
     )
-    engine = CategorizationEngine(agent=agent, protected_tag_names=["Inbox", "From Email"])
+    engine = CategorizationEngine(agent=agent)
     engine.paperless = StubPaperless()
     engine._tags = [
         Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
@@ -246,6 +246,20 @@ def test_engine_preserves_configured_protected_tags():
     engine._correspondents = engine.paperless.list_correspondents()
     engine._document_types = engine.paperless.list_document_types()
     engine._storage_paths = engine.paperless.list_storage_paths()
+    engine._tag_guidance_by_name = {
+        "financial": ConfiguredGuidance(
+            name="financial",
+            entry=GuidanceEntry(use_when="Financial documents and invoices."),
+        ),
+        "inbox": ConfiguredGuidance(
+            name="Inbox",
+            entry=GuidanceEntry(use_when="Manual review is still needed.", protected=True),
+        ),
+        "from email": ConfiguredGuidance(
+            name="From Email",
+            entry=GuidanceEntry(use_when="Document came from email.", protected=True),
+        ),
+    }
 
     document = _make_document()
     document.tags = [1, 3]
@@ -256,7 +270,7 @@ def test_engine_preserves_configured_protected_tags():
     assert suggestion.suggested_tags == ["financial", "Inbox", "From Email"]
 
 
-def test_engine_excludes_configured_protected_tags_from_agent_options():
+def test_engine_includes_guidance_protected_tags_in_agent_options():
     captured: dict[str, AvailableOptions] = {}
 
     class CapturingAgent(StubAgent):
@@ -280,10 +294,7 @@ def test_engine_excludes_configured_protected_tags_from_agent_options():
                 )
             )
 
-    engine = CategorizationEngine(
-        agent=CapturingAgent(AgentCategorizationResult()),
-        protected_tag_names=["Inbox", "From Email"],
-    )
+    engine = CategorizationEngine(agent=CapturingAgent(AgentCategorizationResult()))
     engine.paperless = StubPaperless()
     engine._tags = [
         Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
@@ -293,10 +304,38 @@ def test_engine_excludes_configured_protected_tags_from_agent_options():
     engine._correspondents = engine.paperless.list_correspondents()
     engine._document_types = engine.paperless.list_document_types()
     engine._storage_paths = engine.paperless.list_storage_paths()
+    engine._tag_guidance_by_name = {
+        "financial": ConfiguredGuidance(
+            name="financial",
+            entry=GuidanceEntry(use_when="Financial documents and invoices."),
+        ),
+        "inbox": ConfiguredGuidance(
+            name="Inbox",
+            entry=GuidanceEntry(use_when="Manual review is still needed.", protected=True),
+        ),
+        "from email": ConfiguredGuidance(
+            name="From Email",
+            entry=GuidanceEntry(use_when="Document came from email.", protected=True),
+        ),
+    }
 
     engine.categorize_document(_make_document())
 
-    assert captured["options"].tags == [_FINANCIAL_GUIDED_TAG]
+    assert captured["options"].tags == [
+        _FINANCIAL_GUIDED_TAG,
+        GuidedEntityOption(
+            id=3,
+            name="From Email",
+            use_when="Document came from email.",
+            protected=True,
+        ),
+        GuidedEntityOption(
+            id=1,
+            name="Inbox",
+            use_when="Manual review is still needed.",
+            protected=True,
+        ),
+    ]
 
 
 def test_engine_excludes_lifecycle_tags_from_agent_options_and_current_metadata():
@@ -408,8 +447,8 @@ def test_engine_removes_lifecycle_tags_from_agent_suggestions():
 
     suggestion = engine.categorize_document(_make_document())
 
-    assert suggestion.suggested_tag_ids == [2, 1]
-    assert suggestion.suggested_tags == ["financial", "Inbox"]
+    assert suggestion.suggested_tag_ids == [2]
+    assert suggestion.suggested_tags == ["financial"]
 
 
 def test_engine_maps_pending_correspondent_id_to_new_suggestion():

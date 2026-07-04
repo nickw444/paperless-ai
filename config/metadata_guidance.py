@@ -17,11 +17,15 @@ class GuidanceEntry(BaseModel):
 
     use_when: str | None = None
     avoid_when: str | None = None
+    protected: bool = False
 
     def has_guidance(self) -> bool:
         use_when = self.use_when and self.use_when.strip()
         avoid_when = self.avoid_when and self.avoid_when.strip()
         return bool(use_when or avoid_when)
+
+    def has_metadata(self) -> bool:
+        return self.has_guidance() or self.protected
 
 
 class ConfiguredGuidance(BaseModel):
@@ -96,7 +100,7 @@ def _parse_guidance_section(
             )
 
         entry = GuidanceEntry.model_validate(entry_data)
-        if entry.has_guidance():
+        if entry.has_metadata():
             normalized_name = entity_name.strip()
             guidance[normalized_name.lower()] = ConfiguredGuidance(
                 name=normalized_name,
@@ -128,6 +132,7 @@ def build_guided_options(
                 name=entity.name,
                 use_when=entry.use_when.strip() if entry.use_when else None,
                 avoid_when=entry.avoid_when.strip() if entry.avoid_when else None,
+                protected=entry.protected or None,
             )
         )
 

@@ -21,6 +21,7 @@ def test_load_metadata_guidance_parses_tags_document_types_and_storage_paths():
                 "Tax Deduction": {
                     "use_when": "Actual deductible expenses",
                     "avoid_when": "Routine Tax Invoice bills",
+                    "protected": True,
                 },
             },
             "document_types": {
@@ -41,6 +42,7 @@ def test_load_metadata_guidance_parses_tags_document_types_and_storage_paths():
     assert "tax deduction" in guidance.tags
     assert guidance.tags["tax deduction"].name == "Tax Deduction"
     assert guidance.tags["tax deduction"].entry.use_when == "Actual deductible expenses"
+    assert guidance.tags["tax deduction"].entry.protected is True
     assert "bill" in guidance.document_types
     assert guidance.document_types["bill"].entry.use_when == "Payment requested"
     assert "nick" in guidance.storage_paths
@@ -95,6 +97,34 @@ def test_build_guided_options_matches_available_entities_only():
     assert resolved[0].id == 12
     assert resolved[0].name == "Tax Deduction"
     assert resolved[0].avoid_when == "Tax Invoice bills"
+
+
+def test_build_guided_options_marks_protected_tags():
+    guidance = load_metadata_guidance_from_mapping(
+        {
+            "tags": {
+                "Inbox": {
+                    "use_when": "Manual review is still needed",
+                    "protected": True,
+                },
+            },
+        },
+        path=Path("config.yaml"),
+    )
+
+    resolved = build_guided_options(
+        [type("Tag", (), {"id": 1, "name": "Inbox"})()],
+        guidance.tags,
+    )
+
+    assert resolved == [
+        GuidedEntityOption(
+            id=1,
+            name="Inbox",
+            use_when="Manual review is still needed",
+            protected=True,
+        )
+    ]
 
 
 def test_unknown_guidance_names_reports_missing_paperless_entities():

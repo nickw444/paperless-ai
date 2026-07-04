@@ -15,18 +15,6 @@ def test_supported_attachment_mime_types_are_normalized_from_yaml_list():
     assert settings.supported_mime_types == ["application/pdf", "image/png"]
 
 
-def test_protected_tags_are_normalized_from_yaml_list():
-    settings = Settings(
-        paperless={
-            "url": "http://paperless.example",
-            "api_token": "token",
-        },
-        protected_tags=[" Inbox ", "From Email", "Tax Deduction", ""],
-    )
-
-    assert settings.protected_tags == ["Inbox", "From Email", "Tax Deduction"]
-
-
 def test_backfill_comparison_version_defaults_to_initial_marker():
     settings = Settings(
         paperless={
@@ -81,14 +69,12 @@ attachments:
   supported_mime_types:
     - application/pdf
     - image/png
-protected_tags:
-  - Inbox
-  - Tax Deduction
 metadata_guidance:
   tags:
     Tax Deduction:
       use_when: Actual deductible expenses
       avoid_when: Routine Tax Invoice bills
+      protected: true
   document_types:
     Bill:
       use_when: Payment requested
@@ -117,10 +103,10 @@ processing:
     assert settings.attachments.enabled is False
     assert settings.attachments.max_bytes == 42
     assert settings.attachments.supported_mime_types == ["application/pdf", "image/png"]
-    assert settings.protected_tags == ["Inbox", "Tax Deduction"]
     assert settings.metadata_guidance.tags["tax deduction"].entry.use_when == (
         "Actual deductible expenses"
     )
+    assert settings.metadata_guidance.tags["tax deduction"].entry.protected is True
     assert settings.metadata_guidance.document_types["bill"].entry.use_when == "Payment requested"
     assert settings.metadata_guidance.storage_paths["nick"].entry.use_when == (
         "Documents addressed to Nick"

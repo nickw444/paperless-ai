@@ -23,16 +23,15 @@ attachments:
     - image/jpeg
     - image/png
 
-protected_tags:
-  - Inbox
-  - From Email
-  - Tax Deduction
-
 metadata_guidance:
   tags:
     Example Tag:
       use_when: When the document clearly matches this tag.
       avoid_when: When the tag would only apply incidentally.
+    Manual Review:
+      use_when: When the document needs human review.
+      avoid_when: When the document can be safely filed without review.
+      protected: true
   document_types:
     Example Type:
       use_when: When the document fits this category.

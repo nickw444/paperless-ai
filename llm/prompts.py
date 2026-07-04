@@ -40,6 +40,7 @@ Based on the document content, current_metadata, and available_options:
    Use current_metadata.tags as context; when the same tags still apply, return their ids;
    add or remove only when OCR or attachment context supports the change. Each tag option
    includes use_when and avoid_when rules. Only tags listed in available_options.tags may be used.
+   Tags marked protected may be added when relevant, but must not be removed when already present.
 6. Set correspondent_id to a matching id from available_options.correspondents, OR set
    new_correspondent_name when no listed correspondent fits (not both).
    When current_metadata.correspondent is set and still appropriate, return its id.

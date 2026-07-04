@@ -25,6 +25,7 @@ class GuidedEntityOption(BaseModel):
     name: str
     use_when: str | None = None
     avoid_when: str | None = None
+    protected: bool | None = None
 
 
 class CategorizationAgentOutput(BaseModel):
