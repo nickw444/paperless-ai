@@ -31,6 +31,7 @@ class PaperlessSettings(BaseModel):
         """Ensure URL doesn't end with a trailing slash."""
         return v.rstrip("/")
 
+
 class CodexSettings(BaseModel):
     """Codex CLI settings."""
 
@@ -47,6 +48,7 @@ class CodexSettings(BaseModel):
         default="minimal",
         description='Codex reasoning effort passed via "--config model_reasoning_effort=<value>"',
     )
+
 
 class AttachmentSettings(BaseModel):
     """Document attachment settings."""
@@ -115,6 +117,7 @@ class Settings(BaseModel):
         if not v:
             return MetadataGuidance()
         return load_metadata_guidance_from_mapping(v, path=Path("metadata_guidance"))
+
 
 def _load_config_file(path: Path) -> dict[str, Any]:
     if not path.exists():
