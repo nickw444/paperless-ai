@@ -247,11 +247,12 @@ class CategorizationEngine:
             CategorizationSuggestion with the analysis results
 
         Note:
-            Guided tags marked protected are preserved if present on the document. They
-            remain available to the agent so they can be added, but omitted protected tags
-            are automatically restored to suggested_tag_ids. Lifecycle tags managed by
-            paperless-ai itself are omitted from the agent context and applied only by the
-            engine.
+            Only guided tags are managed by the agent. Unguided tags are omitted from
+            the agent context and preserved if present on the document. Guided tags
+            marked protected remain available to the agent so they can be added, but
+            are also preserved when already present. Lifecycle tags managed by
+            paperless-ai itself are omitted from the agent context and applied only by
+            the engine.
         """
         # Load metadata if not already loaded
         self._load_metadata()
@@ -314,6 +315,9 @@ class CategorizationEngine:
         visible_tag_ids = set(available_options.tag_ids())
         current_visible_tag_ids = [
             tag_id for tag_id in current_user_tag_ids if tag_id in visible_tag_ids
+        ]
+        current_unmanaged_tag_ids = [
+            tag_id for tag_id in current_user_tag_ids if tag_id not in visible_tag_ids
         ]
 
         current_metadata = CurrentMetadata(
@@ -392,6 +396,10 @@ class CategorizationEngine:
             output.tag_ids,
             engine_managed_tag_ids,
         )
+
+        for unmanaged_tag_id in current_unmanaged_tag_ids:
+            if unmanaged_tag_id not in suggested_tag_ids:
+                suggested_tag_ids.append(unmanaged_tag_id)
 
         for protected_tag_id in protected_tag_ids:
             if protected_tag_id in document.tags and protected_tag_id not in suggested_tag_ids:

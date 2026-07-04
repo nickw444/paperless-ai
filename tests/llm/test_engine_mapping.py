@@ -135,8 +135,8 @@ def test_engine_maps_id_based_output_to_suggestion():
     assert suggestion.suggested_type == "Invoice"
     assert suggestion.suggested_type_id == 10
     assert suggestion.suggested_type_is_new is False
-    assert suggestion.suggested_tags == ["financial"]
-    assert suggestion.suggested_tag_ids == [2]
+    assert suggestion.suggested_tags == ["financial", "Inbox"]
+    assert suggestion.suggested_tag_ids == [2, 1]
     assert suggestion.suggested_correspondent == "Acme Corp"
     assert suggestion.suggested_correspondent_is_new is True
 
@@ -447,8 +447,8 @@ def test_engine_removes_lifecycle_tags_from_agent_suggestions():
 
     suggestion = engine.categorize_document(_make_document())
 
-    assert suggestion.suggested_tag_ids == [2]
-    assert suggestion.suggested_tags == ["financial"]
+    assert suggestion.suggested_tag_ids == [2, 1]
+    assert suggestion.suggested_tags == ["financial", "Inbox"]
 
 
 def test_engine_maps_pending_correspondent_id_to_new_suggestion():
@@ -560,10 +560,12 @@ def test_engine_excludes_guidance_hidden_current_tags_from_agent_metadata():
     document = _make_document()
     document.tags = [1, 2, 3]
 
-    engine.categorize_document(document)
+    suggestion = engine.categorize_document(document)
 
     assert captured["options"].tags == [_FINANCIAL_GUIDED_TAG]
     assert captured["metadata"].tags == [EntityOption(id=2, name="financial")]
+    assert suggestion.suggested_tag_ids == [1, 2, 3]
+    assert suggestion.suggested_tags == ["Inbox", "financial", "Bill"]
 
 
 def test_engine_excludes_guidance_hidden_current_document_type_from_agent_metadata():

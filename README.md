@@ -108,6 +108,9 @@ paperless-ai offers only the configured tags, document types, and storage paths 
 `metadata_guidance` to Codex. This keeps categorization choices deliberate and gives
 the model concrete rules for each option.
 
+Tags omitted from `metadata_guidance.tags` are not visible to Codex and are preserved
+if already present on a document, so Codex cannot add or remove them.
+
 Tags marked `protected: true` are still available to Codex, so they can be added when
 relevant. If a protected tag is already present on a document, paperless-ai preserves it
 even when Codex omits it from the suggested tag IDs.
