@@ -1,4 +1,4 @@
-"""Load and resolve metadata guidance for tags and document types."""
+"""Load and resolve metadata guidance for tags, document types, and storage paths."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from llm.schemas import GuidedEntityOption
 
 
 class GuidanceEntry(BaseModel):
-    """Usage instructions for a tag or document type."""
+    """Usage instructions for a Paperless metadata entity."""
 
     use_when: str | None = None
     avoid_when: str | None = None
@@ -32,10 +32,11 @@ class ConfiguredGuidance(BaseModel):
 
 
 class MetadataGuidance(BaseModel):
-    """Tag and document type guidance loaded from a single YAML file."""
+    """Metadata guidance loaded from a single YAML file."""
 
     tags: dict[str, ConfiguredGuidance] = Field(default_factory=dict)
     document_types: dict[str, ConfiguredGuidance] = Field(default_factory=dict)
+    storage_paths: dict[str, ConfiguredGuidance] = Field(default_factory=dict)
 
 
 class NamedEntity(Protocol):
@@ -44,7 +45,7 @@ class NamedEntity(Protocol):
 
 
 def load_metadata_guidance(path: Path) -> MetadataGuidance:
-    """Load tag and document type guidance from a YAML file."""
+    """Load metadata guidance from a YAML file."""
     if not path.exists():
         return MetadataGuidance()
 
@@ -54,12 +55,14 @@ def load_metadata_guidance(path: Path) -> MetadataGuidance:
     if not isinstance(raw, dict):
         raise ValueError(f"Metadata guidance file must be a mapping: {path}")
 
-    if "tags" in raw or "document_types" in raw:
+    if "tags" in raw or "document_types" in raw or "storage_paths" in raw:
         tags_section = raw.get("tags", {})
         document_types_section = raw.get("document_types", {})
+        storage_paths_section = raw.get("storage_paths", {})
     else:
         raise ValueError(
-            f"Metadata guidance file must contain 'tags' and/or 'document_types' sections: {path}"
+            f"Metadata guidance file must contain 'tags', 'document_types', "
+            f"and/or 'storage_paths' sections: {path}"
         )
 
     return MetadataGuidance(
@@ -68,6 +71,11 @@ def load_metadata_guidance(path: Path) -> MetadataGuidance:
             document_types_section,
             path=path,
             section_name="document_types",
+        ),
+        storage_paths=_parse_guidance_section(
+            storage_paths_section,
+            path=path,
+            section_name="storage_paths",
         ),
     )
 

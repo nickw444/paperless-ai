@@ -33,7 +33,7 @@ def _sample_options() -> AvailableOptions:
             GuidedEntityOption(id=3, name="2024", use_when="Year 2024"),
         ],
         correspondents=[EntityOption(id=5, name="Acme Corp")],
-        storage_paths=[EntityOption(id=7, name="Bills")],
+        storage_paths=[GuidedEntityOption(id=7, name="Bills", use_when="Household bills")],
     )
 
 
@@ -78,6 +78,11 @@ def test_format_available_options_json_is_compact():
         "id": 10,
         "name": "Invoice",
         "use_when": "Invoices",
+    }
+    assert parsed["storage_paths"][0] == {
+        "id": 7,
+        "name": "Bills",
+        "use_when": "Household bills",
     }
     assert "pending_correspondents" not in parsed
 

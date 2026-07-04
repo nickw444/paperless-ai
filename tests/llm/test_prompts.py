@@ -98,6 +98,7 @@ def test_categorization_instructions_require_guided_metadata_options():
     assert "primarily ABOUT" in instructions
     assert "available_options.document_types" in instructions
     assert "available_options.tags" in instructions
+    assert "Do not force a storage path" in instructions
 
 
 def test_format_current_metadata_json_is_compact():

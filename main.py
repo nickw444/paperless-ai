@@ -390,7 +390,7 @@ def _create_new_entities(engine, new_entities):
     return created
 
 
-def _display_suggestion(suggestion):
+def _display_suggestion(suggestion, output_console=console):
     """Display a single categorization suggestion."""
     # Status indicator
     if suggestion.status == "success":
@@ -398,22 +398,24 @@ def _display_suggestion(suggestion):
     else:
         status_icon = "[red]✗[/red]"
 
-    console.print(f"\n{status_icon} [bold]Document ID: {suggestion.document_id}[/bold]")
+    output_console.print(f"\n{status_icon} [bold]Document ID: {suggestion.document_id}[/bold]")
 
     if suggestion.error_message:
-        console.print(f"  [red]Error:[/red] {suggestion.error_message}")
+        output_console.print(f"  [red]Error:[/red] {suggestion.error_message}")
         return
 
     # Title
     current_title = f'"{suggestion.current_title}"'
     suggested_title = f'"{suggestion.suggested_title}"' if suggestion.suggested_title else None
     if suggested_title and current_title != suggested_title:
-        console.print(f"  Title: [dim]{current_title}[/dim] -> [cyan]{suggested_title}[/cyan]")
+        output_console.print(
+            f"  Title: [dim]{current_title}[/dim] -> [cyan]{suggested_title}[/cyan]"
+        )
     else:
-        console.print(f"  Title: {current_title}")
+        output_console.print(f"  Title: {current_title}")
 
     if suggestion.suggested_content:
-        console.print(
+        output_console.print(
             f"  Content: [cyan]LLM OCR replacement suggested "
             f"({len(suggestion.suggested_content):,} chars)[/cyan]"
         )
@@ -422,20 +424,20 @@ def _display_suggestion(suggestion):
     current_document_date = suggestion.current_document_date or "None"
     suggested_document_date = suggestion.suggested_document_date
     if suggested_document_date and current_document_date != suggested_document_date:
-        console.print(
+        output_console.print(
             f"  Date Created: [dim]{current_document_date}[/dim] -> "
             f"[cyan]{suggested_document_date}[/cyan]"
         )
     elif current_document_date != "None":
-        console.print(f"  Date Created: {current_document_date}")
+        output_console.print(f"  Date Created: {current_document_date}")
 
     # Type
     current_type = suggestion.current_type_name or "None"
     suggested_type = suggestion.suggested_type
     if suggested_type and current_type.lower() != suggested_type.lower():
-        console.print(f"  Type: [dim]{current_type}[/dim] -> [cyan]{suggested_type}[/cyan]")
+        output_console.print(f"  Type: [dim]{current_type}[/dim] -> [cyan]{suggested_type}[/cyan]")
     elif current_type != "None":
-        console.print(f"  Type: {current_type}")
+        output_console.print(f"  Type: {current_type}")
 
     # Tags
     current_tag_names = suggestion.current_tag_names
@@ -446,9 +448,9 @@ def _display_suggestion(suggestion):
         name.lower() for name in suggested_tag_names
     }
     if suggested_tags and not tags_unchanged:
-        console.print(f"  Tags: [dim]{current_tags}[/dim] -> [cyan]{suggested_tags}[/cyan]")
+        output_console.print(f"  Tags: [dim]{current_tags}[/dim] -> [cyan]{suggested_tags}[/cyan]")
     elif current_tags != "None":
-        console.print(f"  Tags: {current_tags}")
+        output_console.print(f"  Tags: {current_tags}")
 
     # Correspondent
     current_corr = suggestion.current_correspondent_name or "None"
@@ -458,23 +460,25 @@ def _display_suggestion(suggestion):
             corr_display = f"[yellow]NEW: {suggested_corr}[/yellow]"
         else:
             corr_display = f"[cyan]{suggested_corr}[/cyan]"
-        console.print(f"  Correspondent: [dim]{current_corr}[/dim] -> {corr_display}")
+        output_console.print(f"  Correspondent: [dim]{current_corr}[/dim] -> {corr_display}")
     elif current_corr != "None":
-        console.print(f"  Correspondent: {current_corr}")
+        output_console.print(f"  Correspondent: {current_corr}")
 
     # Storage Path
     current_storage = suggestion.current_storage_path_name or "None"
     suggested_storage = suggestion.suggested_storage_path
     if suggested_storage and current_storage.lower() != suggested_storage.lower():
-        console.print(
+        output_console.print(
             f"  Storage Path: [dim]{current_storage}[/dim] -> [cyan]{suggested_storage}[/cyan]"
         )
-    elif current_storage != "None":
-        console.print(f"  Storage Path: {current_storage}")
+    else:
+        output_console.print(f"  Storage Path: {current_storage}")
 
     # Show warning if there are NEW correspondents
     if suggestion.suggested_correspondent_is_new:
-        console.print("  [yellow]⚠️  New correspondent will be created during review[/yellow]")
+        output_console.print(
+            "  [yellow]⚠️  New correspondent will be created during review[/yellow]"
+        )
 
 
 def _should_analyze_for_stale_reprocessing(

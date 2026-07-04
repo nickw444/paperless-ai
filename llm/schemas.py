@@ -71,7 +71,7 @@ class AvailableOptions(BaseModel):
     document_types: list[GuidedEntityOption] = Field(default_factory=list)
     tags: list[GuidedEntityOption] = Field(default_factory=list)
     correspondents: list[EntityOption] = Field(default_factory=list)
-    storage_paths: list[EntityOption] = Field(default_factory=list)
+    storage_paths: list[GuidedEntityOption] = Field(default_factory=list)
 
     def document_type_ids(self) -> list[int]:
         return [option.id for option in self.document_types]

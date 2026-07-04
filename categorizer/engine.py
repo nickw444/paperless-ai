@@ -67,6 +67,7 @@ class CategorizationEngine:
         metadata_guidance = self._load_metadata_guidance()
         self._tag_guidance_by_name = metadata_guidance.tags
         self._document_type_guidance_by_name = metadata_guidance.document_types
+        self._storage_path_guidance_by_name = metadata_guidance.storage_paths
         self._guidance_warned = False
 
     def _guidance_path(self) -> Path | None:
@@ -102,6 +103,14 @@ class CategorizationEngine:
                 [document_type.name for document_type in self._document_types],
                 path=path,
                 label="document_types",
+            )
+
+        if self._storage_path_guidance_by_name:
+            warn_unknown_guidance_names(
+                self._storage_path_guidance_by_name,
+                [storage_path.name for storage_path in self._storage_paths],
+                path=path,
+                label="storage_paths",
             )
 
         self._guidance_warned = True
@@ -303,7 +312,10 @@ class CategorizationEngine:
                 [EntityOption(id=c.id, name=c.name) for c in self._correspondents],
                 pending_new_correspondents,
             ),
-            storage_paths=[EntityOption(id=sp.id, name=sp.name) for sp in self._storage_paths],
+            storage_paths=build_guided_options(
+                self._storage_paths,
+                self._storage_path_guidance_by_name,
+            ),
         )
         visible_document_type_ids = set(available_options.document_type_ids())
         visible_tag_ids = set(available_options.tag_ids())

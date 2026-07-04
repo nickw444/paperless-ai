@@ -51,6 +51,9 @@ CORRESPONDENT MATCHING:
 - Normalize new names: drop legal suffixes (Inc., LLC), URLs, and excess punctuation
 
 7. Set storage_path_id to the best matching id from available_options.storage_paths, or null.
+   Each storage path option includes use_when and avoid_when rules. Only paths listed in
+   available_options.storage_paths may be used.
+   Do not force a storage path when the document does not clearly fit one; return null instead.
    When current_metadata.storage_path is set and still appropriate, return its id.
 
 SEMANTIC TAG MATCHING:

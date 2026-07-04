@@ -44,7 +44,10 @@ class Settings(BaseSettings):
     )
     metadata_guidance_file: str | None = Field(
         default="metadata_guidance.yaml",
-        description="Path to YAML file with allowed tags and document types plus usage guidance",
+        description=(
+            "Path to YAML file with allowed tags, document types, and storage paths "
+            "plus usage guidance"
+        ),
     )
     processing_delay_between_documents_seconds: float = Field(
         default=0,

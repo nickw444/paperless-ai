@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from categorizer.engine import FAILED_TAG_NAME, PARSED_TAG_NAME, CategorizationEngine
+from config.metadata_guidance import ConfiguredGuidance, GuidanceEntry
 from llm.schemas import (
     AgentCategorizationResult,
     AvailableOptions,
@@ -12,7 +13,7 @@ from llm.schemas import (
     GuidedEntityOption,
 )
 from llm.usage import AgentUsageMetadata
-from paperless.models import Document, DocumentAttachment, DocumentType, Tag
+from paperless.models import Document, DocumentAttachment, DocumentType, StoragePath, Tag
 
 _FINANCIAL_GUIDED_TAG = GuidedEntityOption(
     id=2,
@@ -75,6 +76,33 @@ def _make_document() -> Document:
     )
 
 
+class CapturingAgent(StubAgent):
+    """Agent stub that records the options supplied by the engine."""
+
+    def __init__(self, result: AgentCategorizationResult):
+        super().__init__(result)
+        self.available_options: AvailableOptions | None = None
+
+    def categorize_document(
+        self,
+        ocr_content: str,
+        available_options: AvailableOptions,
+        current_metadata: CurrentMetadata,
+        attachment: DocumentAttachment | None = None,
+    ) -> AgentCategorizationResult:
+        del ocr_content, current_metadata, attachment
+        self.available_options = available_options
+        return self._result
+
+
+class StoragePathPaperless(StubPaperless):
+    def list_storage_paths(self):
+        return [
+            StoragePath(id=31, name="Nick", slug="nick", path="Nick/{created_year}"),
+            StoragePath(id=32, name="Household", slug="household", path="Household/{created_year}"),
+        ]
+
+
 def test_engine_maps_id_based_output_to_suggestion():
     agent = StubAgent(
         AgentCategorizationResult(
@@ -111,6 +139,46 @@ def test_engine_maps_id_based_output_to_suggestion():
     assert suggestion.suggested_tag_ids == [2, 1]
     assert suggestion.suggested_correspondent == "Acme Corp"
     assert suggestion.suggested_correspondent_is_new is True
+
+
+def test_engine_passes_guided_storage_paths_to_agent_only():
+    agent = CapturingAgent(
+        AgentCategorizationResult(
+            output=CategorizationAgentOutput(
+                title="Statement - Nick",
+                document_type_id=None,
+                tag_ids=[],
+                correspondent_id=None,
+                new_correspondent_name=None,
+                storage_path_id=31,
+            )
+        )
+    )
+    engine = CategorizationEngine(agent=agent)
+    engine.paperless = StoragePathPaperless()
+    engine._tags = engine.paperless.list_tags()
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+    engine._storage_path_guidance_by_name = {
+        "nick": ConfiguredGuidance(
+            name="Nick",
+            entry=GuidanceEntry(
+                use_when="Documents addressed specifically to Nick.",
+                avoid_when="Shared household documents.",
+            ),
+        )
+    }
+
+    suggestion = engine.categorize_document(_make_document())
+
+    assert agent.available_options is not None
+    assert [path.name for path in agent.available_options.storage_paths] == ["Nick"]
+    assert agent.available_options.storage_paths[0].use_when == (
+        "Documents addressed specifically to Nick."
+    )
+    assert suggestion.suggested_storage_path == "Nick"
+    assert suggestion.suggested_storage_path_id == 31
 
 
 def test_engine_preserves_tag_order_when_tag_set_unchanged():

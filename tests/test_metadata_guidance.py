@@ -14,7 +14,7 @@ from llm.prompts import build_categorization_prompt
 from llm.schemas import AvailableOptions, CurrentMetadata, GuidedEntityOption
 
 
-def test_load_metadata_guidance_parses_tags_and_document_types(tmp_path: Path):
+def test_load_metadata_guidance_parses_tags_document_types_and_storage_paths(tmp_path: Path):
     path = tmp_path / "metadata_guidance.yaml"
     path.write_text(
         """
@@ -25,6 +25,10 @@ tags:
 document_types:
   Bill:
     use_when: Payment requested
+storage_paths:
+  Nick:
+    use_when: Documents addressed to Nick
+    avoid_when: Shared household documents
 """.strip(),
         encoding="utf-8",
     )
@@ -36,12 +40,16 @@ document_types:
     assert guidance.tags["tax deduction"].entry.use_when == "Actual deductible expenses"
     assert "bill" in guidance.document_types
     assert guidance.document_types["bill"].entry.use_when == "Payment requested"
+    assert "nick" in guidance.storage_paths
+    assert guidance.storage_paths["nick"].entry.use_when == "Documents addressed to Nick"
+    assert guidance.storage_paths["nick"].entry.avoid_when == "Shared household documents"
 
 
 def test_load_metadata_guidance_returns_empty_when_missing(tmp_path: Path):
     guidance = load_metadata_guidance(tmp_path / "missing.yaml")
     assert guidance.tags == {}
     assert guidance.document_types == {}
+    assert guidance.storage_paths == {}
 
 
 def test_load_metadata_guidance_rejects_invalid_root(tmp_path: Path):
@@ -68,13 +76,14 @@ def test_load_metadata_guidance_allows_null_sections(tmp_path: Path):
 
     assert guidance.tags == {}
     assert guidance.document_types == {}
+    assert guidance.storage_paths == {}
 
 
 def test_load_metadata_guidance_requires_sectioned_format(tmp_path: Path):
     path = tmp_path / "metadata_guidance.yaml"
     path.write_text("Tax Deduction:\n  use_when: Legacy flat format\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="tags.*document_types"):
+    with pytest.raises(ValueError, match="tags.*document_types.*storage_paths"):
         load_metadata_guidance(path)
 
 
@@ -135,6 +144,25 @@ def test_warn_unknown_guidance_names_prints_warning(capsys, tmp_path: Path):
     assert "metadata_guidance.yaml" in captured.err
 
 
+def test_warn_unknown_storage_path_guidance_names_prints_warning(capsys, tmp_path: Path):
+    guidance = load_metadata_guidance_from_mapping(
+        tags={},
+        document_types={},
+        storage_paths={"Old Person": {"use_when": "No longer exists"}},
+    )
+
+    warn_unknown_guidance_names(
+        guidance.storage_paths,
+        ["Nick"],
+        path=tmp_path / "metadata_guidance.yaml",
+        label="storage_paths",
+    )
+
+    captured = capsys.readouterr()
+    assert "Old Person" in captured.err
+    assert "storage_paths" in captured.err
+
+
 def test_build_categorization_prompt_embeds_guidance_in_available_options():
     prompt = build_categorization_prompt(
         content="Invoice total $42",
@@ -157,7 +185,33 @@ def test_build_categorization_prompt_embeds_guidance_in_available_options():
     assert "Only tags listed in available_options.tags may be used" in prompt
 
 
-def load_metadata_guidance_from_mapping(*, tags: dict, document_types: dict | None = None):
+def test_build_categorization_prompt_embeds_storage_path_guidance_in_available_options():
+    prompt = build_categorization_prompt(
+        content="Dear Nick, your statement is ready",
+        available_options=AvailableOptions(
+            storage_paths=[
+                GuidedEntityOption(
+                    id=31,
+                    name="Nick",
+                    use_when="Documents addressed to Nick",
+                    avoid_when="Documents addressed to someone else",
+                )
+            ]
+        ),
+        current_metadata=CurrentMetadata(title="scan.pdf"),
+    )
+
+    assert '"storage_paths":[{"id":31,"name":"Nick"' in prompt
+    assert '"use_when":"Documents addressed to Nick"' in prompt
+    assert "available_options.storage_paths may be used" in prompt
+
+
+def load_metadata_guidance_from_mapping(
+    *,
+    tags: dict,
+    document_types: dict | None = None,
+    storage_paths: dict | None = None,
+):
     from config.metadata_guidance import MetadataGuidance, _parse_guidance_section
 
     return MetadataGuidance(
@@ -170,5 +224,10 @@ def load_metadata_guidance_from_mapping(*, tags: dict, document_types: dict | No
             document_types or {},
             path=Path("metadata_guidance.yaml"),
             section_name="document_types",
+        ),
+        storage_paths=_parse_guidance_section(
+            storage_paths or {},
+            path=Path("metadata_guidance.yaml"),
+            section_name="storage_paths",
         ),
     )

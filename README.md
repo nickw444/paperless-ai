@@ -64,6 +64,9 @@ SUPPORTED_ATTACHMENT_MIME_TYPES=application/pdf,image/jpeg,image/png
 # Protected tags
 PROTECTED_TAGS=Inbox,From Email,Tax Deduction
 
+# Metadata guidance
+METADATA_GUIDANCE_FILE=metadata_guidance.yaml
+
 # Processing metadata custom fields
 PAPERLESS_AI_PROCESSING_VERSION=1
 PAPERLESS_AI_VERSION_FIELD_NAME=paperless-ai-version
@@ -74,6 +77,29 @@ PAPERLESS_AI_TOKENS_FIELD_NAME=paperless-ai-tokens
 ### CLI version requirements
 
 Codex responses are JSON-only, enforced by schema at invocation time. Requires Codex CLI with `exec --output-schema` support.
+
+### Metadata guidance
+
+By default, paperless-ai reads `metadata_guidance.yaml` from the project root and offers only the configured tags, document types, and storage paths to Codex. This keeps categorization choices deliberate and gives the model concrete rules for each option.
+
+Example:
+
+```yaml
+tags:
+  Tax Deduction:
+    use_when: The document supports a deductible expense claim.
+    avoid_when: The document is only a routine tax invoice or receipt.
+document_types:
+  Bill:
+    use_when: Payment is requested or due.
+storage_paths:
+  Nick:
+    use_when: The document is addressed specifically to Nick.
+    avoid_when: The document is addressed to another person or the whole household.
+  Household:
+    use_when: The document is addressed to the household, property, or multiple people.
+    avoid_when: The document clearly belongs to one named recipient.
+```
 
 ## Usage
 
