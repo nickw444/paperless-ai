@@ -75,6 +75,8 @@ metadata_guidance:
       use_when: Actual deductible expenses
       avoid_when: Routine Tax Invoice bills
       protected: true
+    Legacy Bill:
+      deprecated: true
   document_types:
     Bill:
       use_when: Payment requested
@@ -107,6 +109,7 @@ processing:
         "Actual deductible expenses"
     )
     assert settings.metadata_guidance.tags["tax deduction"].entry.protected is True
+    assert settings.metadata_guidance.tags["legacy bill"].entry.deprecated is True
     assert settings.metadata_guidance.document_types["bill"].entry.use_when == "Payment requested"
     assert settings.metadata_guidance.storage_paths["nick"].entry.use_when == (
         "Documents addressed to Nick"

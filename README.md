@@ -115,6 +115,10 @@ Tags marked `protected: true` are still available to Codex, so they can be added
 relevant. If a protected tag is already present on a document, paperless-ai preserves it
 even when Codex omits it from the suggested tag IDs.
 
+Tags marked `deprecated: true` are not visible to Codex and are not preserved. If a
+deprecated tag is already present on a document, paperless-ai removes it when applying
+the suggestion.
+
 ## Usage
 
 Test connection to Paperless:

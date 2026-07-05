@@ -568,6 +568,63 @@ def test_engine_excludes_guidance_hidden_current_tags_from_agent_metadata():
     assert suggestion.suggested_tags == ["Inbox", "financial", "Bill"]
 
 
+def test_engine_removes_deprecated_hidden_current_tags():
+    captured: dict[str, AvailableOptions | CurrentMetadata] = {}
+
+    class CapturingAgent(StubAgent):
+        def categorize_document(
+            self,
+            ocr_content: str,
+            available_options: AvailableOptions,
+            current_metadata: CurrentMetadata,
+            attachment: DocumentAttachment | None = None,
+        ):
+            del ocr_content, attachment
+            captured["options"] = available_options
+            captured["metadata"] = current_metadata
+            return AgentCategorizationResult(
+                output=CategorizationAgentOutput(
+                    title="Invoice",
+                    document_type_id=10,
+                    tag_ids=[2],
+                    correspondent_id=None,
+                    new_correspondent_name=None,
+                    storage_path_id=None,
+                )
+            )
+
+    engine = CategorizationEngine(agent=CapturingAgent(AgentCategorizationResult()))
+    engine.paperless = StubPaperless()
+    engine._tags = [
+        Tag(id=1, name="Inbox", slug="inbox", is_inbox_tag=True),
+        Tag(id=2, name="financial", slug="financial"),
+        Tag(id=3, name="Bill", slug="bill"),
+    ]
+    engine._correspondents = engine.paperless.list_correspondents()
+    engine._document_types = engine.paperless.list_document_types()
+    engine._storage_paths = engine.paperless.list_storage_paths()
+    engine._tag_guidance_by_name = {
+        "financial": ConfiguredGuidance(
+            name="financial",
+            entry=GuidanceEntry(use_when="Financial documents and invoices."),
+        ),
+        "bill": ConfiguredGuidance(
+            name="Bill",
+            entry=GuidanceEntry(deprecated=True),
+        ),
+    }
+
+    document = _make_document()
+    document.tags = [1, 2, 3]
+
+    suggestion = engine.categorize_document(document)
+
+    assert captured["options"].tags == [_FINANCIAL_GUIDED_TAG]
+    assert captured["metadata"].tags == [EntityOption(id=2, name="financial")]
+    assert suggestion.suggested_tag_ids == [2, 1]
+    assert suggestion.suggested_tags == ["financial", "Inbox"]
+
+
 def test_engine_excludes_guidance_hidden_current_document_type_from_agent_metadata():
     captured: dict[str, AvailableOptions | CurrentMetadata] = {}
 

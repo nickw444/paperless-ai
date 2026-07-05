@@ -18,6 +18,7 @@ class GuidanceEntry(BaseModel):
     use_when: str | None = None
     avoid_when: str | None = None
     protected: bool = False
+    deprecated: bool = False
 
     def has_guidance(self) -> bool:
         use_when = self.use_when and self.use_when.strip()
@@ -25,7 +26,7 @@ class GuidanceEntry(BaseModel):
         return bool(use_when or avoid_when)
 
     def has_metadata(self) -> bool:
-        return self.has_guidance() or self.protected
+        return self.has_guidance() or self.protected or self.deprecated
 
 
 class ConfiguredGuidance(BaseModel):
@@ -126,6 +127,8 @@ def build_guided_options(
         if configured is None:
             continue
         entry = configured.entry
+        if entry.deprecated:
+            continue
         guided.append(
             GuidedEntityOption(
                 id=entity.id,

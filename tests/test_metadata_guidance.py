@@ -23,6 +23,9 @@ def test_load_metadata_guidance_parses_tags_document_types_and_storage_paths():
                     "avoid_when": "Routine Tax Invoice bills",
                     "protected": True,
                 },
+                "Legacy Bill": {
+                    "deprecated": True,
+                },
             },
             "document_types": {
                 "Bill": {
@@ -43,6 +46,7 @@ def test_load_metadata_guidance_parses_tags_document_types_and_storage_paths():
     assert guidance.tags["tax deduction"].name == "Tax Deduction"
     assert guidance.tags["tax deduction"].entry.use_when == "Actual deductible expenses"
     assert guidance.tags["tax deduction"].entry.protected is True
+    assert guidance.tags["legacy bill"].entry.deprecated is True
     assert "bill" in guidance.document_types
     assert guidance.document_types["bill"].entry.use_when == "Payment requested"
     assert "nick" in guidance.storage_paths
@@ -125,6 +129,26 @@ def test_build_guided_options_marks_protected_tags():
             protected=True,
         )
     ]
+
+
+def test_build_guided_options_omits_deprecated_tags():
+    guidance = load_metadata_guidance_from_mapping(
+        {
+            "tags": {
+                "Bill": {
+                    "deprecated": True,
+                },
+            },
+        },
+        path=Path("config.yaml"),
+    )
+
+    resolved = build_guided_options(
+        [type("Tag", (), {"id": 3, "name": "Bill"})()],
+        guidance.tags,
+    )
+
+    assert resolved == []
 
 
 def test_unknown_guidance_names_reports_missing_paperless_entities():

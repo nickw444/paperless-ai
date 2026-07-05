@@ -32,6 +32,8 @@ metadata_guidance:
       use_when: When the document needs human review.
       avoid_when: When the document can be safely filed without review.
       protected: true
+    Legacy Tag:
+      deprecated: true
   document_types:
     Example Type:
       use_when: When the document fits this category.

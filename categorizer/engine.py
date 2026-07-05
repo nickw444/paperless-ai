@@ -137,6 +137,22 @@ class CategorizationEngine:
                 protected_ids.append(tag.id)
         return protected_ids
 
+    def _get_deprecated_tag_ids(self) -> list[int]:
+        """Get IDs for guided tags that should be removed when omitted."""
+        deprecated_names = {
+            configured.name.lower()
+            for configured in self._tag_guidance_by_name.values()
+            if configured.entry.deprecated
+        }
+        if not deprecated_names:
+            return []
+
+        deprecated_ids = []
+        for tag in self._tags:
+            if tag.name.lower() in deprecated_names:
+                deprecated_ids.append(tag.id)
+        return deprecated_ids
+
     def _get_engine_managed_tag_ids(self) -> list[int]:
         """Get IDs for lifecycle tags managed by paperless-ai itself."""
         managed_ids = []
@@ -291,6 +307,7 @@ class CategorizationEngine:
 
         pending_new_correspondents = list(self.new_entities_found["correspondents"].keys())
         protected_tag_ids = self._get_protected_tag_ids()
+        deprecated_tag_ids = set(self._get_deprecated_tag_ids())
         omitted_tag_ids = set(engine_managed_tag_ids)
 
         available_options = AvailableOptions(
@@ -398,11 +415,18 @@ class CategorizationEngine:
         )
 
         for unmanaged_tag_id in current_unmanaged_tag_ids:
-            if unmanaged_tag_id not in suggested_tag_ids:
+            if (
+                unmanaged_tag_id not in deprecated_tag_ids
+                and unmanaged_tag_id not in suggested_tag_ids
+            ):
                 suggested_tag_ids.append(unmanaged_tag_id)
 
         for protected_tag_id in protected_tag_ids:
-            if protected_tag_id in document.tags and protected_tag_id not in suggested_tag_ids:
+            if (
+                protected_tag_id not in deprecated_tag_ids
+                and protected_tag_id in document.tags
+                and protected_tag_id not in suggested_tag_ids
+            ):
                 suggested_tag_ids.append(protected_tag_id)
 
         if set(current_user_tag_ids) == set(suggested_tag_ids):
